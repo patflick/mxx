@@ -30,11 +30,22 @@ namespace mxx
  * Mapping of C/C++ types to MPI datatypes.
  *
  * Possible ways of implementation
- * 1) templated function get_mpi_dt<template T>();
+ * 1) templated function get_mpi_dt<template T>(); (e.g. boost)
+ *     -> doesn't allow partial template specialization
  * 2) overloaded functions with type deduction
+ *     -> can't properly clean up types
  * 3) templated class with static method (-> allows partial specialization)
- * 4) templated class with member method (allows proper Type_free)
+ * 4) templated class with member method (allows proper Type_free)!!!
  */
+
+// TODO:
+// - [ ] base class with MPI type modifiers (contiguous, vector, indexed, etc)
+// - [ ] compile time checker for builtin types
+// - [ ] static function to return MPI_Datatype for builtin types!
+// - [ ] put attr_map in here!
+// - [ ] add to-string and caching
+// - [ ] unpacking types?
+// - [ ] (see wrappers in official MPI C++ bindings)
 
 template <typename T>
 class datatype {};
@@ -127,6 +138,7 @@ public:
             std::swap(types[0], types[1]);
         }
         MPI_Type_create_struct(2, blocklen, displs, types, &_type);
+        // TODO: resize!
         MPI_Type_commit(&_type);
     }
     const MPI_Datatype& type() const {
