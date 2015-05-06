@@ -21,6 +21,7 @@
 #include <tuple>
 #include <numeric>
 #include <limits>
+#include <type_traits>
 
 
 namespace mxx
@@ -40,7 +41,7 @@ namespace mxx
 
 // TODO:
 // - [ ] base class with MPI type modifiers (contiguous, vector, indexed, etc)
-// - [ ] compile time checker for builtin types
+// - [x] compile time checker for builtin types
 // - [ ] static function to return MPI_Datatype for builtin types!
 // - [ ] put attr_map in here!
 // - [ ] add to-string and caching
@@ -50,13 +51,78 @@ namespace mxx
 template <typename T>
 class datatype {};
 
+template <typename T>
+class is_builtin_type : public std::false_type {};
+
+
+// TODO: use this as a base class for datatypes?
+class datatype_base {
+public:
+    datatype_base() : mpitype(MPI_DATATYPE_NULL), builtin(true) {
+    }
+
+    // copy constructor
+    datatype_base(const datatype_base& o) {
+        builtin = o.builtin;
+        if (builtin) {
+            mpitype = o.mpitype;
+        } else {
+            MPI_Type_dup(o.mpitype, &mpitype);
+            MPI_Type_commit(&mpitype);
+        }
+    }
+
+    // move constructor
+    datatype_base(datatype_base&& o) {
+        builtin = o.builtin;
+        mpitype = o.mpitype;
+        o.mpitype = MPI_DATATYPE_NULL;
+        o.builtin = true;
+    }
+
+    // copy assignment
+    datatype_base& operator=(const datatype_base& o) {
+        builtin = o.builtin;
+        if (builtin) {
+            mpitype = o.mpitype;
+        } else {
+            MPI_Type_dup(o.mpitype, &mpitype);
+            MPI_Type_commit(&mpitype);
+        }
+        return *this;
+    }
+
+    // move assignment
+    datatype_base& operator=(datatype_base&& o) {
+        builtin = o.builtin;
+        mpitype = o.mpitype;
+        o.mpitype = MPI_DATATYPE_NULL;
+        o.builtin = true;
+        return *this;
+    }
+
+    virtual ~datatype_base() {
+        if (!builtin)
+            MPI_Type_free(&mpitype);
+    }
+private:
+    MPI_Datatype mpitype;
+    bool builtin;
+};
+
+/*********************************************************************
+ *                     Define built-in datatypes                     *
+ *********************************************************************/
+
 #define MXX_DATATYPE_MPI_BUILTIN(ctype, mpi_type)                           \
 template <> class datatype<ctype> {                                         \
 public:                                                                     \
     datatype() {}                                                           \
     MPI_Datatype type() const {return mpi_type;}                            \
     virtual ~datatype() {}                                                  \
-};
+};                                                                          \
+                                                                            \
+template <> class is_builtin_type<ctype> : public std::true_type {};        \
 
 // char
 MXX_DATATYPE_MPI_BUILTIN(char, MPI_CHAR);

@@ -1,6 +1,4 @@
-
 #include <iostream>
-
 #include <mxx/reduction.hpp>
 
 int main(int argc, char *argv[])
@@ -47,6 +45,15 @@ int main(int argc, char *argv[])
 
     MPI_Type_free(&ct);
     //MPI_Type_free(&dt);
+
+    // check mxx builtin
+    std::cout << "builtin int: " << mxx::is_builtin_type<int>::value << std::endl;
+    std::cout << "builtin size_t: " << mxx::is_builtin_type<size_t>::value << std::endl;
+    std::cout << "builtin tuple: " << mxx::is_builtin_type<std::tuple<int,int> >::value << std::endl;
+
+    MPI_Datatype t = MPI_INT;
+    MPI_Type_free(&t);
+
     // finalize MPI
     MPI_Finalize();
     return 0;

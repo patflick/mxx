@@ -16,6 +16,7 @@
 
 // C++ includes
 #include <vector>
+#include <memory>
 
 // mxx includes
 #include "datatypes.hpp"
@@ -27,8 +28,6 @@ namespace mxx
 // TODO: put somewhere else
 class request
 {
-private:
-    MPI_Request _mpi_req;
 public:
     request() : _mpi_req(MPI_REQUEST_NULL) {}
     request(MPI_Request req) : _mpi_req(req) {}
@@ -58,7 +57,89 @@ public:
 
     // TODO: functions to access/return `MPI_Status`
 
-    virtual ~request() {}
+    virtual ~request() {
+        if (_mpi_req != MPI_REQUEST_NULL)
+            MPI_Request_free(&_mpi_req);
+    }
+
+private:
+    MPI_Request _mpi_req;
+};
+
+/// Combines MPI request and received data storage similar to std::future
+/// Calling .get() will first MPI_Wait and then std::move the data out of
+/// the mxx::future
+template <typename T>
+class future {
+public:
+    typedef std::remove_reference<T> value_type;
+
+    // disable copying
+    future(const future& f) = delete;
+    future& operator=(const future& f) = delete;
+
+    // Move Construction
+    future(future&& f)
+        : m_data(std::move(f.m_data)),
+          m_valid(f.m_valid),
+          m_ever_valid(f.m_ever_valid) {}
+
+    // Move Assignment (TODO: simply default??)
+    future& operator=(future&& f) {
+        m_data = std::move(f.m_data);
+        m_valid = f.m_valid;
+        m_ever_valid = f.m_ever_valid;
+    }
+
+    /// Default construction creates the output memory space (for MPI to write
+    /// into).
+    future() : m_data(new T()), m_valid(false), m_ever_valid(false) {}
+
+    /// should only be available by the async functions !? only to those functions
+    /// which created the std::future. how??
+    value_type* data() {
+        return m_data.get();
+    }
+
+    /// Returns `true` if the result is available
+    bool valid() {
+        if (!m_valid) {
+            // TODO
+            // MPI_Test and save result in m_valid
+        }
+        return m_valid;
+    }
+
+    /// blocks until the result becomes available
+    void wait() {
+        if (!m_valid) {
+            // TODO:
+            // MPI_Waitall
+        }
+        m_valid = true;
+        m_ever_valid = true;
+    }
+
+    // TODO: template specialize for <void>
+    T get() {
+        wait();
+        m_valid = false;
+        return std::move(*m_data);
+    }
+
+    virtual ~future() {
+        // check if this has ever been valid. If not: wait(), otherwise
+        // destruct the m_data member (happens anyway)
+        if (!m_ever_valid) {
+            wait();
+        }
+    }
+
+private:
+    typedef std::unique_ptr<T> ptr_type;
+    ptr_type m_data;
+    bool m_valid;
+    bool m_ever_valid;
 };
 
 template <typename T>

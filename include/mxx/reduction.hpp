@@ -3,7 +3,6 @@
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Reduction operations.
  *
- *
  * TODO add Licence
  */
 
@@ -34,7 +33,7 @@ template <typename K, typename T>
 class attr_map {
 private:
     // static "variables" wrapped into static member functions
-    static int& key(){ static int k{0}; return k; }
+    static int& key(){ static int k=0; return k; }
     static std::mutex& mut(){ static std::mutex m; return m; }
     static std::map<K, int>& keymap(){ static std::map<K, int> m; return m; }
 
@@ -245,16 +244,12 @@ T scan(T& x, MPI_Comm comm = MPI_COMM_WORLD) {
 
 template <typename T, typename Func>
 T scan(T& x, Func func, MPI_Comm comm = MPI_COMM_WORLD) {
-    // get user op
-    //MPI_Op op = create_user_op<T, Func>(func);
     // get type
     mxx::datatype<T> dt;
     // get op
     mxx::custom_op<T> op(func, dt.type());
     T result;
     MPI_Scan(&x, &result, 1, op.get_type(), op.get_op(), comm);
-    // clean up op
-    //free_user_op<T>(op);
     return result;
 }
 
@@ -318,21 +313,21 @@ T reverse_scan(T& x, Func func, MPI_Comm comm = MPI_COMM_WORLD) {
  ************************/
 // useful for testing global conditions, such as termination conditions
 
-inline bool test_all(bool x, MPI_Comm comm = MPI_COMM_WORLD) {
+inline bool all_of(bool x, MPI_Comm comm = MPI_COMM_WORLD) {
     int i = x ? 1 : 0;
     int result;
     MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LAND, comm);
     return result != 0;
 }
 
-inline bool test_any(bool x, MPI_Comm comm = MPI_COMM_WORLD) {
+inline bool any_of(bool x, MPI_Comm comm = MPI_COMM_WORLD) {
     int i = x ? 1 : 0;
     int result;
     MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LOR, comm);
     return result != 0;
 }
 
-inline bool test_none(bool x, MPI_Comm comm = MPI_COMM_WORLD) {
+inline bool none_of(bool x, MPI_Comm comm = MPI_COMM_WORLD) {
     int i = x ? 1 : 0;
     int result;
     MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LAND, comm);
