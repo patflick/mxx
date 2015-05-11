@@ -20,127 +20,286 @@
 
 // mxx includes
 #include "datatypes.hpp"
+#include "comm.hpp"
 
 
 namespace mxx
 {
 
-// TODO: put somewhere else
-class request
-{
-public:
-    request() : _mpi_req(MPI_REQUEST_NULL) {}
-    request(MPI_Request req) : _mpi_req(req) {}
-    request(const request& req) : _mpi_req(req._mpi_req) {}
-    request& operator=(const request& req) {
-        _mpi_req = req._mpi_req;
-        return *this;
-    }
+template <typename T>
+class future;
 
+template <typename T>
+class future_builder;
+
+
+// TODO: put somewhere else
+class requests {
+public:
+    requests() : m_requests() {}
+    requests(MPI_Request req) : m_requests(1, req) {}
+    requests(const requests& req) = default;
+    requests(requests&& req) = default;
+    requests& operator=(const requests& req) = default;
+    requests& operator=(requests&& req) = default;
+
+    /*
     const MPI_Request& get() const {
         return _mpi_req;
     }
+    */
+    void append(MPI_Request req) {
+        m_requests.push_back(req);
+    }
 
+    MPI_Request& add() {
+        m_requests.push_back(MPI_Request());
+        return m_requests.back();
+    }
+
+    /*
     MPI_Request& get() {
         return _mpi_req;
     }
+    */
+    MPI_Request& back() {
+        return m_requests.back();
+    }
+
+    const MPI_Request& back() const {
+        return m_requests.back();
+    }
+
+    MPI_Request& operator[](std::size_t i){
+        return m_requests[i];
+    }
+
+    const MPI_Request& operator[](std::size_t i) const {
+        return m_requests[i];
+    }
 
     void wait() {
-        MPI_Wait(&_mpi_req, MPI_STATUS_IGNORE);
+        MPI_Waitall(m_requests.size(), &m_requests[0], MPI_STATUSES_IGNORE);
     }
 
     bool test() {
         int flag;
-        MPI_Test(&_mpi_req, &flag, MPI_STATUS_IGNORE);
+        MPI_Testall(m_requests.size(), &m_requests[0], &flag, MPI_STATUSES_IGNORE);
         return flag != 0;
     }
 
     // TODO: functions to access/return `MPI_Status`
 
-    virtual ~request() {
-        if (_mpi_req != MPI_REQUEST_NULL)
-            MPI_Request_free(&_mpi_req);
+    virtual ~requests() {
+        for (MPI_Request& r : m_requests) {
+            if (r != MPI_REQUEST_NULL)
+                MPI_Request_free(&r);
+        }
     }
 
 private:
-    MPI_Request _mpi_req;
+    std::vector<MPI_Request> m_requests;
 };
 
 /// Combines MPI request and received data storage similar to std::future
 /// Calling .get() will first MPI_Wait and then std::move the data out of
 /// the mxx::future
+namespace impl {
 template <typename T>
-class future {
+class future_base {
 public:
-    typedef std::remove_reference<T> value_type;
+    /// wrapped type
+    typedef typename std::remove_reference<T>::type value_type;
 
     // disable copying
-    future(const future& f) = delete;
-    future& operator=(const future& f) = delete;
+    future_base(const future_base& f) = delete;
+    future_base& operator=(const future_base& f) = delete;
 
-    // Move Construction
-    future(future&& f)
-        : m_data(std::move(f.m_data)),
-          m_valid(f.m_valid),
-          m_ever_valid(f.m_ever_valid) {}
-
-    // Move Assignment (TODO: simply default??)
-    future& operator=(future&& f) {
-        m_data = std::move(f.m_data);
-        m_valid = f.m_valid;
-        m_ever_valid = f.m_ever_valid;
-    }
-
-    /// Default construction creates the output memory space (for MPI to write
-    /// into).
-    future() : m_data(new T()), m_valid(false), m_ever_valid(false) {}
-
-    /// should only be available by the async functions !? only to those functions
-    /// which created the std::future. how??
-    value_type* data() {
-        return m_data.get();
-    }
+    // default move construction and assignment
+    future_base(future_base&& f) = default;
+    future_base& operator=(future_base&& f) = default;
 
     /// Returns `true` if the result is available
     bool valid() {
-        if (!m_valid) {
-            // TODO
-            // MPI_Test and save result in m_valid
-        }
+        if (!m_valid)
+            m_valid = m_req.test();
         return m_valid;
     }
 
     /// blocks until the result becomes available
     void wait() {
-        if (!m_valid) {
-            // TODO:
-            // MPI_Waitall
-        }
+        if (!m_valid)
+            m_req.wait();
         m_valid = true;
         m_ever_valid = true;
     }
 
     // TODO: template specialize for <void>
-    T get() {
+    value_type get() {
         wait();
         m_valid = false;
         return std::move(*m_data);
     }
 
-    virtual ~future() {
+    virtual ~future_base() {
         // check if this has ever been valid. If not: wait(), otherwise
         // destruct the m_data member (happens anyway)
-        if (!m_ever_valid) {
+        if (!m_ever_valid && !m_valid)
             wait();
-        }
     }
 
-private:
-    typedef std::unique_ptr<T> ptr_type;
+protected:
+    // functions only accessible by the future_builder
+    value_type* data() {
+        return m_data.get();
+    }
+
+    /// Default construction creates the output memory space (for MPI to write
+    /// into).
+    /// Only for friends!
+    future_base() : m_valid(false), m_ever_valid(false) {}
+
+    MPI_Request& add_request() {
+        return m_req.add();
+    }
+
+    friend class mxx::future_builder<T>;
+
+protected:
+    typedef std::unique_ptr<value_type> ptr_type;
     ptr_type m_data;
     bool m_valid;
     bool m_ever_valid;
+    requests m_req;
 };
+
+}
+
+template <typename T>
+class future : public impl::future_base<T> {
+public:
+    /// wrapped type
+    typedef typename std::remove_reference<T>::type value_type;
+
+    // disable copying
+    future(const future& f) = delete;
+    future& operator=(const future& f) = delete;
+
+    // default move construction and assignment
+    future(future&& f) = default;
+    future& operator=(future&& f) = default;
+
+    // TODO: template specialize for <void>
+    value_type get() {
+        wait();
+        this->m_valid = false;
+        return std::move(*m_data);
+    }
+
+protected:
+    // functions only accessible by the future_builder
+    value_type* data() {
+        return m_data.get();
+    }
+
+    /// Default construction creates the output memory space (for MPI to write
+    /// into).
+    /// Only for friends!
+    future() : impl::future_base<T>(), m_data(new T()) {}
+
+    friend class mxx::future_builder<T>;
+
+protected:
+    typedef std::unique_ptr<value_type> ptr_type;
+    ptr_type m_data;
+};
+
+
+// template specialization for <void>
+template <>
+class future<void> : public impl::future_base<void> {
+public:
+    /// wrapped type
+    typedef void value_type;
+
+    // disable copying
+    future(const future& f) = delete;
+    future& operator=(const future& f) = delete;
+
+    // default move construction and assignment
+    future(future&& f) = default;
+    future& operator=(future&& f) = default;
+
+    void get() {
+        wait();
+        this->m_valid = false;
+    }
+
+protected:
+    // functions only accessible by the future_builder
+    void* data() {
+        return nullptr;
+    }
+
+    /// Default construction creates the output memory space (for MPI to write
+    /// into).
+    /// Only for friends!
+    future() : impl::future_base<void>() {}
+
+    // declare `builder` as friend
+    friend class mxx::future_builder<void>;
+};
+
+
+template <typename T>
+class future_builder {
+public:
+    typedef typename  mxx::future<T>::value_type value_type;
+
+    future_builder() : m_valid(true), m_future() {}
+
+    MPI_Request& add_request() {
+        return m_future.add_request();
+    }
+
+    value_type* data() {
+        return m_future.data();
+    }
+
+    mxx::future<T> get_future() {
+        m_valid = false;
+        return std::move(m_future);
+    }
+
+private:
+    bool m_valid;
+    mxx::future<T> m_future;
+};
+
+template <typename T>
+mxx::future<void> isend(const T& msg, int dest, int tag) {
+
+}
+
+template <typename T>
+void send(const T& msg, int dest, int tag) {
+
+}
+
+template <typename T>
+mxx::future<T> irecv(int src, int tag) {
+
+}
+
+template <typename T>
+T recv(int src, int tag) {
+
+}
+
+template <typename T>
+std::vector<T> recv(int src, int tag) {
+
+}
 
 template <typename T>
 T right_shift(const T& t, MPI_Comm comm = MPI_COMM_WORLD)
@@ -170,8 +329,7 @@ T right_shift(const T& t, MPI_Comm comm = MPI_COMM_WORLD)
         // send my most right element to the right
         MPI_Send(const_cast<T*>(&t), 1, mpi_dt, rank+1, tag, comm);
     }
-    if (rank > 0)
-    {
+    if (rank > 0) {
         // wait for the async receive to finish
         MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
     }
@@ -215,63 +373,50 @@ T left_shift(const T& t, MPI_Comm comm = MPI_COMM_WORLD)
 }
 
 template <typename T>
-request i_right_shift(const T& input_element, T& output_element, MPI_Comm comm = MPI_COMM_WORLD)
-{
+mxx::future<T> async_right_shift(const T& input_element, const mxx::comm& comm = mxx::comm()) {
     // get datatype
-    datatype<T> dt;
-    MPI_Datatype mpi_dt = dt.type();
-
-    // get communication parameters
-    // TODO: mxx comm or boost::mpi::comm
-    int p, rank;
-    MPI_Comm_size(comm, &p);
-    MPI_Comm_rank(comm, &rank);
+    mxx::datatype<T> dt;
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
 
-    request req;
-    if (rank > 0) // if not last processor
-    {
-        MPI_Irecv(&output_element, 1, mpi_dt, rank-1, tag,
-                  comm, &req.get());
+    mxx::future_builder<T> f;
+    // if not first processor
+    if (comm.rank() > 0) {
+        MPI_Irecv(f.data(), 1, dt.type(), comm.rank()-1, tag,
+                  comm, &f.add_request());
     }
-    if (rank < p-1) // if not first processor
-    {
+    // if not last processor
+    if (comm.rank() < comm.size()-1){
         // send my most right element to the right
-        MPI_Send(const_cast<T*>(&input_element), 1, mpi_dt, rank+1, tag, comm);
+        MPI_Isend(const_cast<T*>(&input_element), 1, dt.type(), comm.rank()+1,
+                  tag, comm, &f.add_request());
     }
-    return req;
+
+    return std::move(f.get_future());
 }
 
 template <typename T>
-request i_left_shift(const T& input_element, T& output_element, MPI_Comm comm = MPI_COMM_WORLD)
-{
+mxx::future<T> async_left_shift(const T& input_element, const mxx::comm& comm = mxx::comm()) {
     // get datatype
     datatype<T> dt;
-    MPI_Datatype mpi_dt = dt.type();
-
-    // get communication parameters
-    // TODO: mxx comm or boost::mpi::comm
-    int p, rank;
-    MPI_Comm_size(comm, &p);
-    MPI_Comm_rank(comm, &rank);
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
 
-    request req;
-    if (rank < p-1) // if not last processor
-    {
-        MPI_Irecv(&output_element, 1, mpi_dt, rank+1, tag,
-                  comm, &req.get());
+    mxx::future_builder<T> f;
+    // if not last processor
+    if (comm.rank() < comm.size()-1) {
+        MPI_Irecv(f.data(), 1, dt.type(), comm.rank()+1, tag,
+                  comm, &f.add_request());
     }
-    if (rank > 0) // if not first processor
-    {
+    // if not first processor
+    if (comm.rank() > 0) {
         // send my most right element to the right
-        MPI_Send(const_cast<T*>(&input_element), 1, mpi_dt, rank-1, tag, comm);
+        MPI_Isend(const_cast<T*>(&input_element), 1, dt.type(), comm.rank()-1,
+                  tag, comm, &f.add_request());
     }
-    return req;
+    return std::move(f.get_future());
 }
 
 } // namespace mxx
