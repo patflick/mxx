@@ -203,9 +203,12 @@ public:
             std::swap(displs[0], displs[1]);
             std::swap(types[0], types[1]);
         }
-        MPI_Type_create_struct(2, blocklen, displs, types, &_type);
-        // TODO: resize!
+        // create MPI_Datatype (resized to actual sizeof())
+        MPI_Datatype struct_type;
+        MPI_Type_create_struct(2, blocklen, displs, types, &struct_type);
+        MPI_Type_create_resized(struct_type, 0, sizeof(p), &_type);
         MPI_Type_commit(&_type);
+        MPI_Type_free(&struct_type);
     }
     const MPI_Datatype& type() const {
         return _type;
@@ -300,17 +303,11 @@ public:
         }
 
         // create type
-        MPI_Type_create_struct(size, blocklen, &displs[0], &mpitypes[0], &_type);
+        MPI_Datatype struct_type;
+        MPI_Type_create_struct(size, blocklen, &displs[0], &mpitypes[0], &struct_type);
+        MPI_Type_create_resized(struct_type, 0, sizeof(tuple_t), &_type);
         MPI_Type_commit(&_type);
-
-        // check extend with sizeof()
-        // TODO: check arrays of elements to make sure that upper and lowerbound
-        //       are set correctly (use MPI_Type_create_resized)
-        MPI_Aint lb, extent;
-        MPI_Type_get_extent(_type, &lb, &extent);
-        if (extent != sizeof(tuple_t))
-          // TODO: own error/assert handeling (MPI-Safe)
-            throw std::runtime_error("MPI_Datatype extend does not match the sizeof the tuple");
+        MPI_Type_free(&struct_type);
     }
 
     const MPI_Datatype& type() const {

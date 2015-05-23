@@ -189,7 +189,6 @@ public:
     future(future&& f) = default;
     future& operator=(future&& f) = default;
 
-    // TODO: template specialize for <void>
     value_type get() {
         wait();
         this->m_valid = false;
@@ -277,8 +276,22 @@ private:
 };
 
 template <typename T>
-mxx::future<void> isend(const T& msg, int dest, int tag) {
+mxx::future<void> async_send(const T& msg, int dest, int tag) {
+    mxx::future_builder<void> f;
+    mxx::datatype<T> dt;
+    MPI_Isend(const_cast<T*>(&msg), 1, dt.type(), dest,
+              tag, mxx::comm(), &f.add_request());
+    return std::move(f.get_future());
+}
 
+template <typename T>
+/// TODO: handle case if vector size is larger than INT_MAX
+mxx::future<void> async_send(const std::vector<T>& msg, int dest, int tag) {
+    mxx::future_builder<void> f;
+    mxx::datatype<T> dt;
+    MPI_Isend(const_cast<T*>(&msg[0]), msg.size(), dt.type(), dest,
+              tag, mxx::comm(), &f.add_request());
+    return std::move(f.get_future());
 }
 
 template <typename T>
@@ -292,14 +305,51 @@ mxx::future<T> irecv(int src, int tag) {
 }
 
 template <typename T>
-T recv(int src, int tag) {
+struct recv_impl {
+    static void do_recv_into(int src, int tag, T& buf) {
+        mxx::datatype<T> dt;
+        MPI_Recv(&buf, 1, dt.type(), src, tag, mxx::comm(), MPI_STATUS_IGNORE);
+    }
+    static T do_recv(int src, int tag) {
+        T result;
+        do_recv_into(src, tag, result);
+        return result;
+    }
+};
 
+// template specialize for std::vector (variable sized!)
+template <typename T>
+struct recv_impl<std::vector<T> > {
+    static void do_recv_into(int src, int tag, std::vector<T>& buf) {
+        // TODO: threadsafe with MProbe and MRecv (only if MPI-3)
+        // TODO: how do I do this in async?
+        mxx::datatype<T> dt;
+        MPI_Status stat;
+        MPI_Probe(src, tag, mxx::comm(), &stat);
+        int count;
+        MPI_Get_count(&stat, dt.type(), &count);
+        std::cout << "receiving vector<int> of size: " << count << std::endl;
+        if (buf.size() < count)
+            buf.resize(count);
+        MPI_Recv(&buf[0], count, dt.type(), stat.MPI_SOURCE, stat.MPI_TAG, mxx::comm(), MPI_STATUS_IGNORE);
+    }
+    static std::vector<T> do_recv(int src, int tag) {
+        std::vector<T> result;
+        do_recv_into(src, tag, result);
+        return result;
+    }
+};
+
+template <typename T>
+T recv(int src, int tag) {
+    return recv_impl<T>::do_recv(src, tag);
 }
 
 template <typename T>
-std::vector<T> recv(int src, int tag) {
-
+void recv_into(int src, int tag, T& result) {
+    return recv_impl<T>::do_recv_into(src, tag, result);
 }
+
 
 template <typename T>
 T right_shift(const T& t, MPI_Comm comm = MPI_COMM_WORLD)
@@ -373,7 +423,7 @@ T left_shift(const T& t, MPI_Comm comm = MPI_COMM_WORLD)
 }
 
 template <typename T>
-mxx::future<T> async_right_shift(const T& input_element, const mxx::comm& comm = mxx::comm()) {
+mxx::future<T> async_right_shift(const T& x, const mxx::comm& comm = mxx::comm()) {
     // get datatype
     mxx::datatype<T> dt;
 
@@ -389,7 +439,7 @@ mxx::future<T> async_right_shift(const T& input_element, const mxx::comm& comm =
     // if not last processor
     if (comm.rank() < comm.size()-1){
         // send my most right element to the right
-        MPI_Isend(const_cast<T*>(&input_element), 1, dt.type(), comm.rank()+1,
+        MPI_Isend(const_cast<T*>(&x), 1, dt.type(), comm.rank()+1,
                   tag, comm, &f.add_request());
     }
 
@@ -397,7 +447,7 @@ mxx::future<T> async_right_shift(const T& input_element, const mxx::comm& comm =
 }
 
 template <typename T>
-mxx::future<T> async_left_shift(const T& input_element, const mxx::comm& comm = mxx::comm()) {
+mxx::future<T> async_left_shift(const T& x, const mxx::comm& comm = mxx::comm()) {
     // get datatype
     datatype<T> dt;
 
@@ -413,7 +463,7 @@ mxx::future<T> async_left_shift(const T& input_element, const mxx::comm& comm = 
     // if not first processor
     if (comm.rank() > 0) {
         // send my most right element to the right
-        MPI_Isend(const_cast<T*>(&input_element), 1, dt.type(), comm.rank()-1,
+        MPI_Isend(const_cast<T*>(&x), 1, dt.type(), comm.rank()-1,
                   tag, comm, &f.add_request());
     }
     return std::move(f.get_future());

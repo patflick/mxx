@@ -279,6 +279,12 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     // local size
     std::size_t local_size = std::distance(begin, end);
 
+#ifndef NDEBUG
+    // Assert the data is actually block decomposed when given that it is
+    std::size_t global_size = mxx::allreduce(local_size, comm);
+    partition::block_decomposition<std::size_t> mypart(global_size, p, rank);
+    assert(!_AssumeBlockDecomp || local_size == mypart.local_size());
+#endif
     // sample sort
     // 1. pick `s` samples on each processor
     // 2. gather to `rank=0`

@@ -595,7 +595,6 @@ void all2all(InputIterator begin, OutputIterator out, const std::vector<std::siz
         // start with self send/recv
         int recv_from = (rank + (p-i)) % p;
         datatype_contiguous<T> bigtype(recv_counts[recv_from]);
-        std::cerr << "p = " << rank << " recv from: " << recv_from << " els=" << recv_counts[recv_from] << std::endl;
         MPI_Irecv(const_cast<T*>(&(*out)) + recv_displs[recv_from], 1, bigtype.type(),
                   recv_from, tag, comm, &reqs[i]);
     }
@@ -604,7 +603,6 @@ void all2all(InputIterator begin, OutputIterator out, const std::vector<std::siz
     {
         int send_to = (rank + i) % p;
         datatype_contiguous<T> bigtype(send_counts[send_to]);
-        std::cerr << "p = " << rank << " send to: " << send_to << " els=" << send_counts[send_to] << std::endl;
         MPI_Isend(const_cast<T*>(&(*begin))+send_displs[send_to], 1, bigtype.type(), send_to,
                   tag, comm, &reqs[p+i]);
     }

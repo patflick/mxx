@@ -2,6 +2,8 @@
 #include <mxx/reduction.hpp>
 #include <mxx/shift.hpp>
 
+#include <prettyprint.hpp>
+
 int main(int argc, char *argv[])
 {
     // set up MPI
@@ -52,12 +54,30 @@ int main(int argc, char *argv[])
     std::cout << "builtin size_t: " << mxx::is_builtin_type<size_t>::value << std::endl;
     std::cout << "builtin tuple: " << mxx::is_builtin_type<std::tuple<int,int> >::value << std::endl;
 
-    int i = rank;
-    std::tuple<int, double> t(rank, 3.14*rank);
-    mxx::future<std::tuple<int, double> > t2 = mxx::async_left_shift(t);
-    int j; double d;
-    std::tie(j, d) = t2.get();
-    std::cout << "rank " << i << " received: " << j << "," << d << std::endl;
+    //int i = rank;
+    //std::tuple<int, double> t(rank, 3.14*rank);
+    //mxx::future<std::tuple<int, double> > t2 = mxx::async_left_shift(t);
+    //int j; double d;
+    //std::tie(j, d) = t2.get();
+    //std::cout << "rank " << i << " received: " << j << "," << d << std::endl;
+
+    std::vector<int> vec_send = {13, 14, 15};
+    // self send
+    if (mxx::comm().rank() == 0) {
+        mxx::future<void> fut = mxx::async_send(vec_send, 0, 1);
+        std::vector<int> vec = mxx::recv<std::vector<int>>(0, 1);
+        fut.wait();
+        std::cout << "received vec: " << vec << std::endl;
+    }
+
+    {
+    typedef std::tuple<std::array<std::size_t, 4>, unsigned int, unsigned int, unsigned int> tuple_t;
+    mxx::datatype<std::array<std::size_t, 4> > dat;
+    mxx::datatype<tuple_t> dat2;
+    std::cout << "size of the large tuple: " << sizeof(tuple_t) << std::endl;
+    MPI_Datatype mpi_dat = dat.type();
+    }
+
 
     // finalize MPI
     MPI_Finalize();
