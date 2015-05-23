@@ -136,7 +136,7 @@ public:
 
     // TODO: template specialize for <void>
     value_type get() {
-        wait();
+        this->wait();
         m_valid = false;
         return std::move(*m_data);
     }
@@ -190,7 +190,7 @@ public:
     future& operator=(future&& f) = default;
 
     value_type get() {
-        wait();
+        this->wait();
         this->m_valid = false;
         return std::move(*m_data);
     }
