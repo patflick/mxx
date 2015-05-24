@@ -14,8 +14,7 @@
 
 
 // scatter of size 1
-TEST(MxxScatter, ScatterOne)
-{
+TEST(MxxColl, ScatterOne) {
     mxx::comm c = MPI_COMM_WORLD;
 
     std::vector<int> vec;
@@ -46,3 +45,60 @@ TEST(MxxScatter, ScatterOne)
     ASSERT_EQ(3.14*c.rank()*c.rank(), result.second);
 }
 
+
+TEST(MxxColl, ScatterUnknownSize) {
+    mxx::comm c = MPI_COMM_WORLD;
+
+    std::vector<int> vec;
+    std::vector<int> msg1;
+    std::vector<int> msg2;
+    // scatter from 0
+    if (c.rank() == 0) {
+        size_t msgsize = 13;
+        vec.resize(c.size()*msgsize);
+        for (int i = 0; i < c.size(); ++i) {
+            for (size_t j = 0; j < msgsize; ++j)
+            {
+                vec[i*msgsize + j] = -2*j + i;
+            }
+        }
+        // scatter the same thing twice
+        msg1 = mxx::scatter(vec, 0);
+        msg2 = mxx::scatter(vec, 0, c);
+    } else {
+        msg1 = mxx::scatter_recv<int>(0, c);
+        msg2 = mxx::scatter_recv<int>(0);
+    }
+
+    ASSERT_EQ(13, msg1.size());
+    ASSERT_EQ(13, msg2.size());
+    for (int j = 0; j < 13; ++j) {
+        ASSERT_EQ(-2*j+c.rank(), msg1[j]);
+        ASSERT_EQ(-2*j+c.rank(), msg2[j]);
+    }
+}
+
+TEST(MxxColl, ScatterGeneral) {
+    mxx::comm c = MPI_COMM_WORLD;
+
+    std::vector<int> vec;
+    size_t msgsize = 5;
+
+    // scatter from 0
+    if (c.rank() == 0) {
+        vec.resize(c.size()*msgsize);
+        for (int i = 0; i < c.size(); ++i) {
+            for (size_t j = 0; j < msgsize; ++j)
+            {
+                vec[i*msgsize + j] = 2*j + 3*i;
+            }
+        }
+    }
+    std::vector<int> result(msgsize);
+    mxx::scatter(&vec[0], msgsize, &result.front(), 0, c);
+    for (int j = 0; j < (int)msgsize; ++j) {
+        ASSERT_EQ(2*j+3*c.rank(), result[j]);
+    }
+}
+
+// TODO: test for BIG MPI calls

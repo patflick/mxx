@@ -112,7 +112,8 @@ std::vector<T> scatter_recv(size_t size, int root, const mxx::comm& comm = mxx::
 
 template <typename T>
 std::vector<T> scatter(const std::vector<T>& msgs, int root, const mxx::comm& comm = mxx::comm()) {
-    size_t size = msgs.size();
+    size_t size = msgs.size() / comm.size();
+    assert(comm.rank() != 0 || msgs.size() % comm.size() == 0);
     mxx::datatype<size_t> sizedt;
     MPI_Bcast(&size, 1, sizedt.type(), root, comm);
     // now everybody knows the size
@@ -150,8 +151,6 @@ T scatter_one_recv(int root, const mxx::comm& comm = mxx::comm()) {
     scatter((T*)nullptr, 1, &result, root, comm);
     return result;
 }
-
-// TODO: gtest or other test suite for testing MPI
 
 /*********************************************************************
  *                             Scatter-V                             *
