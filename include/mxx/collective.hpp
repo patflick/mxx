@@ -348,8 +348,23 @@ T scatter_one_recv(int root, const mxx::comm& comm = mxx::comm()) {
  *                             Scatter-V                             *
  *********************************************************************/
 
-
 namespace impl {
+
+/**
+ * @brief Implementation of `scatterv()` for messages with elements more than MAX_INT.
+ *
+ * @tparam T        The type of the data.
+ * @param msgs      The data to be scattered. Must be of size \f$ \sum_{i=0}^{p-1} \texttt{sizes[i]}\f$ (number of elements of type `T`).
+ * @param sizes     The size (number of elements) per message per target process.
+ *                  This must be a `std::vector` of size `comm.size()`.
+ * @param out       Pointer to the output data. This has to point to valid
+ *                  memory, which can hold at least `size` many elements of
+ *                  type `T`.
+ * @param recv_size The number of elements received on this process.
+ * @param root      The rank of the process which scatters the data to all
+ *                  other processes.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
 template <typename T>
 void scatterv_big(const T* msgs, const std::vector<size_t>& sizes, T* out, size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
     // implementation of scatter for messages sizes that exceed MAX_INT
@@ -429,7 +444,7 @@ void scatterv(const T* msgs, const std::vector<size_t>& sizes, T* out, size_t re
             std::vector<int> send_counts(comm.size());
             std::copy(sizes.begin(), sizes.end(), send_counts.begin());
             std::vector<int> displs = impl::get_displacements(send_counts);
-            MPI_Scatterv(const_cast<T*>(msgs), &send_counts[0], &displs[0], dt.type,
+            MPI_Scatterv(const_cast<T*>(msgs), &send_counts[0], &displs[0], dt.type(),
                          out, irecv_size, dt.type(), root, comm);
         } else {
             MPI_Scatterv(NULL, NULL, NULL, MPI_DATATYPE_NULL,
@@ -461,7 +476,7 @@ template <typename T>
 std::vector<T> scatterv(const T* msgs, const std::vector<size_t>& sizes, size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
     assert(root != comm.rank() || sizes.size() == comm.size());
     std::vector<T> result(recv_size);
-    scatterv(msgs, sizes, &result[0]. recv_size, root, comm);
+    scatterv(msgs, sizes, &result[0], recv_size, root, comm);
     return std::move(result);
 }
 
@@ -491,7 +506,7 @@ template <typename T>
 std::vector<T> scatterv(const std::vector<T>& msgs, const std::vector<size_t>& sizes, size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
     assert(root != comm.rank() || sizes.size() == comm.size());
     std::vector<T> result(recv_size);
-    scatterv(&msgs[0], sizes, &result[0]. recv_size, root, comm);
+    scatterv(&msgs[0], sizes, &result[0], recv_size, root, comm);
     return std::move(result);
 }
 
@@ -575,7 +590,7 @@ std::vector<T> scatterv(const std::vector<T>& msgs, const std::vector<size_t>& s
  */
 template <typename T>
 void scatterv_recv(T* out, size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
-    scatter((const T*) nullptr, std::vector<size_t>(), out, recv_size, root, comm);
+    scatterv((const T*) nullptr, std::vector<size_t>(), out, recv_size, root, comm);
 }
 
 /**
@@ -596,7 +611,7 @@ void scatterv_recv(T* out, size_t recv_size, int root, const mxx::comm& comm = m
  */
 template <typename T>
 std::vector<T> scatterv_recv(size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
-    std::vector<T> result = scatter((const T*)nullptr, std::vector<size_t>(), recv_size, root, comm);
+    std::vector<T> result = scatterv((const T*)nullptr, std::vector<size_t>(), recv_size, root, comm);
     return std::move(result);
 }
 

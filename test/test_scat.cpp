@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <mxx/collective.hpp>
+#include <cxx-prettyprint/prettyprint.hpp>
 
 
 // scatter of size 1
@@ -102,3 +103,115 @@ TEST(MxxColl, ScatterGeneral) {
 }
 
 // TODO: test for BIG MPI calls
+
+
+TEST(MxxColl, ScattervGeneral) {
+    mxx::comm c = MPI_COMM_WORLD;
+
+    std::vector<int> vec;
+    std::vector<size_t> sizes;
+
+    // scatter from 0
+    if (c.rank() == 0) {
+        sizes.resize(c.size());
+        for (int i = 0; i < c.size(); ++i) {
+            sizes[i] = i+1;
+            for (size_t j = 0; j < (size_t)(i+1); ++j)
+            {
+                vec.push_back(2*j + 3*i);
+            }
+        }
+    }
+
+    // test general case
+    std::vector<int> result(c.rank()+1);
+    mxx::scatterv(&vec[0], sizes, &result.front(), c.rank()+1, 0, c);
+    for (int j = 0; j < (int)result.size(); ++j) {
+        ASSERT_EQ(2*j+3*c.rank(), result[j]);
+    }
+}
+
+TEST(MxxColl, ScattervConvenience) {
+    mxx::comm c = MPI_COMM_WORLD;
+
+    std::vector<int> vec;
+    std::vector<size_t> sizes;
+
+    // scatter from 0
+    if (c.rank() == 0) {
+        sizes.resize(c.size());
+        for (int i = 0; i < c.size(); ++i) {
+            sizes[i] = i+1;
+            for (size_t j = 0; j < (size_t)(i+1); ++j)
+            {
+                vec.push_back(13*j + -23*i);
+            }
+        }
+    }
+
+    // test general case with recv
+    std::vector<int> result(c.rank()+1);
+    if (c.rank() == 0)
+        mxx::scatterv(&vec[0], sizes, &result.front(), c.rank()+1, 0, c);
+    else
+        result = mxx::scatterv_recv<int>(c.rank()+1, 0, MPI_COMM_WORLD);
+    for (int j = 0; j < (int)result.size(); ++j) {
+        ASSERT_EQ(13*j+-23*c.rank(), result[j]);
+    }
+
+    // test convenience functions
+    result = mxx::scatterv(&vec[0], sizes, c.rank()+1, 0, c);
+    ASSERT_EQ(c.rank()+1, result.size());
+    for (int j = 0; j < (int)result.size(); ++j) {
+        ASSERT_EQ(13*j-23*c.rank(), result[j]);
+    }
+    if (c.rank() == 0)
+        result = mxx::scatterv(&vec[0], sizes, c.rank()+1, 0, c);
+    else {
+        result.resize(c.rank() + 1);
+        mxx::scatterv_recv(&result.front(), c.rank()+1, 0);
+    }
+    ASSERT_EQ(c.rank()+1, result.size());
+    for (int j = 0; j < (int)result.size(); ++j) {
+        ASSERT_EQ(13*j-23*c.rank(), result[j]);
+    }
+
+    // test convenience functions
+    result = mxx::scatterv(vec, sizes, c.rank()+1, 0, c);
+    ASSERT_EQ(c.rank()+1, result.size());
+    for (int j = 0; j < (int)result.size(); ++j) {
+        ASSERT_EQ(13*j-23*c.rank(), result[j]);
+    }
+}
+
+// test scatterv variants for which the recv_size is unknown
+// on non-root processes
+TEST(MxxColl, ScattervUnknownSize) {
+    mxx::comm c;
+    std::vector<int> vec;
+    std::vector<size_t> sizes;
+
+    // scatter from last process
+    if (c.rank() == c.size()-1) {
+        sizes.resize(c.size());
+        for (int i = 0; i < c.size(); ++i) {
+            size_t size = 5*(c.size()-i)-3;
+            sizes[i] = size;
+            for (size_t j = 0; j < size; ++j) {
+                vec.push_back(-2340*(int)j + 444*i);
+            }
+        }
+    }
+
+    std::vector<int> result;
+    if (c.rank() == c.size()-1) {
+        result = mxx::scatterv(vec, sizes, c.size()-1, c);
+    } else {
+        result = mxx::scatterv_recv<int>(c.size()-1);
+    }
+
+    ASSERT_EQ(5*(c.size()-c.rank())-3, result.size());
+    for (int j = 0; j < (int)result.size(); ++j) {
+        ASSERT_EQ(-2340*j+444*c.rank(), result[j]);
+    }
+}
