@@ -285,6 +285,111 @@ TEST(MxxColl, GatherGeneral) {
     }
 }
 
+
+TEST(MxxColl, GathervGeneral) {
+    mxx::comm c;
+    std::vector<size_t> recv_sizes;
+    // fill elements
+    size_t size = 5*(c.rank()+2);
+    std::vector<int> els(size);
+    for (size_t i = 0; i < size; ++i) {
+        els[i] = c.rank()*13 - 42*i;
+    }
+    std::vector<int> all;
+    size_t total_size = 0;
+    if (c.rank() == 0) {
+        // prepare recv sizes and output vector
+        recv_sizes.resize(c.size());
+        for (int i = 0; i < c.size(); ++i) {
+            recv_sizes[i] = 5*(i+2);
+            total_size += recv_sizes[i];
+        }
+        all.resize(total_size);
+    }
+
+    // general gatherv
+    mxx::gatherv(&els[0], size, &all[0], recv_sizes, 0, c);
+    if (c.rank() == 0) {
+        size_t pos = 0;
+        for (int i = 0; i < c.size(); ++i) {
+            for (int j = 0; j < (5*(i+2)); ++j) {
+                ASSERT_EQ(i*13 - 42*j, all[pos++]);
+            }
+        }
+    }
+    // convenience functions
+    all = mxx::gatherv(&els[0], size, recv_sizes, 0, c);
+    if (c.rank() == 0) {
+        ASSERT_EQ(total_size, all.size());
+        size_t pos = 0;
+        for (int i = 0; i < c.size(); ++i) {
+            for (int j = 0; j < (5*(i+2)); ++j) {
+                ASSERT_EQ(i*13 - 42*j, all[pos++]);
+            }
+        }
+    } else {
+        ASSERT_EQ(0, all.size());
+    }
+    // convenience functions
+    all = mxx::gatherv(els, recv_sizes, 0);
+    if (c.rank() == 0) {
+        ASSERT_EQ(total_size, all.size());
+        size_t pos = 0;
+        for (int i = 0; i < c.size(); ++i) {
+            for (int j = 0; j < (5*(i+2)); ++j) {
+                ASSERT_EQ(i*13 - 42*j, all[pos++]);
+            }
+        }
+    } else {
+        ASSERT_EQ(0, all.size());
+    }
+}
+
+TEST(MxxColl, GathervUnknownSize) {
+    mxx::comm c;
+    // fill elements
+    size_t size = 5*(c.rank()+2);
+    std::vector<int> els(size);
+    for (size_t i = 0; i < size; ++i) {
+        els[i] = c.rank()*13 - 42*i;
+    }
+    size_t total_size = 0;
+    if (c.rank() == 0) {
+        // prepare recv sizes and output vector
+        for (int i = 0; i < c.size(); ++i) {
+            total_size += 5*(i+2);
+        }
+    }
+
+    // gatherv with unknown receive sizes
+    std::vector<int> all;
+    all = mxx::gatherv(&els[0], size, 0, c);
+    if (c.rank() == 0) {
+        ASSERT_EQ(total_size, all.size());
+        size_t pos = 0;
+        for (int i = 0; i < c.size(); ++i) {
+            for (int j = 0; j < (5*(i+2)); ++j) {
+                ASSERT_EQ(i*13 - 42*j, all[pos++]);
+            }
+        }
+    } else {
+        ASSERT_EQ(0, all.size());
+    }
+    // convenience function (taking vector)
+    all = mxx::gatherv(els, 0);
+    if (c.rank() == 0) {
+        ASSERT_EQ(total_size, all.size());
+        size_t pos = 0;
+        for (int i = 0; i < c.size(); ++i) {
+            for (int j = 0; j < (5*(i+2)); ++j) {
+                ASSERT_EQ(i*13 - 42*j, all[pos++]);
+            }
+        }
+    } else {
+        ASSERT_EQ(0, all.size());
+    }
+}
+
 TEST(MxxColl, AllgatherOne) {
     mxx::comm c;
     std::pair<int,double> x = std::make_pair(13*c.rank(), 3.141/c.rank());
@@ -333,6 +438,88 @@ TEST(MxxColl, AlllgatherGeneral) {
     for (int i = 0; i < c.size(); ++i) {
         for (int j = 0; j < (int)size; ++j) {
             ASSERT_EQ(j*3*i, all[i*size + j]);
+        }
+    }
+}
+
+TEST(MxxColl, AllgathervGeneral) {
+    mxx::comm c;
+    std::vector<size_t> recv_sizes;
+    // fill elements
+    size_t size = 5*(c.rank()+2);
+    std::vector<int> els(size);
+    for (size_t i = 0; i < size; ++i) {
+        els[i] = c.rank()*13 - 42*i;
+    }
+    // prepare recv sizes and output vector
+    std::vector<int> all;
+    size_t total_size = 0;
+    recv_sizes.resize(c.size());
+    for (int i = 0; i < c.size(); ++i) {
+        recv_sizes[i] = 5*(i+2);
+        total_size += recv_sizes[i];
+    }
+    all.resize(total_size);
+
+    // general gatherv
+    mxx::allgatherv(&els[0], size, &all[0], recv_sizes, c);
+    size_t pos = 0;
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < (5*(i+2)); ++j) {
+            ASSERT_EQ(i*13 - 42*j, all[pos++]);
+        }
+    }
+    // convenience functions
+    all = mxx::allgatherv(&els[0], size, recv_sizes, c);
+    ASSERT_EQ(total_size, all.size());
+    pos = 0;
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < (5*(i+2)); ++j) {
+            ASSERT_EQ(i*13 - 42*j, all[pos++]);
+        }
+    }
+    // convenience functions
+    all = mxx::allgatherv(els, recv_sizes);
+    ASSERT_EQ(total_size, all.size());
+    pos = 0;
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < (5*(i+2)); ++j) {
+            ASSERT_EQ(i*13 - 42*j, all[pos++]);
+        }
+    }
+}
+
+TEST(MxxColl, AllgathervUnknownSize) {
+    mxx::comm c;
+    // fill elements
+    size_t size = 5*(c.rank()+2);
+    std::vector<int> els(size);
+    for (size_t i = 0; i < size; ++i) {
+        els[i] = c.rank()*13 - 42*i;
+    }
+    // calculate expected receive size (only for test verification)
+    size_t total_size = 0;
+    for (int i = 0; i < c.size(); ++i) {
+        total_size += 5*(i+2);
+    }
+
+    // gatherv with unknown receive sizes
+    std::vector<int> all;
+    all = mxx::allgatherv(&els[0], size, c);
+    ASSERT_EQ(total_size, all.size());
+    size_t pos = 0;
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < (5*(i+2)); ++j) {
+            ASSERT_EQ(i*13 - 42*j, all[pos++]);
+        }
+    }
+    // convenience function (taking vector)
+    all = mxx::allgatherv(els);
+    ASSERT_EQ(total_size, all.size());
+    pos = 0;
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < (5*(i+2)); ++j) {
+            ASSERT_EQ(i*13 - 42*j, all[pos++]);
         }
     }
 }
