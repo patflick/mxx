@@ -36,6 +36,8 @@ constexpr size_t max_int = MXX_MAX_INT;
 constexpr size_t max_int = std::numeric_limits<int>::max();
 #endif
 
+static_assert(sizeof(size_t) == sizeof(MPI_Aint), "MPI_Aint must be the same size as size_t");
+
 /*********************************************************************
  *                             Scatter                              *
  *********************************************************************/
@@ -90,25 +92,8 @@ std::vector<index_t> get_displacements(const std::vector<index_t>& counts)
 template <typename T>
 void scatter_big(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm = mxx::comm())
 {
-    // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::requests reqs;
-    int tag = 1234; // TODO: handle tags somewhere (as attributes in the comm?)
-    if (comm.rank() == root) {
-        mxx::datatype_contiguous<T> dt(size);
-        for (int i = 0; i < comm.size(); ++i) {
-            if (i == root) {
-                // copy input into output
-                std::copy(msgs+i*size, msgs+(i+1)*size, out);
-            } else {
-                MPI_Isend(const_cast<T*>(msgs)+i*size, 1, dt.type(), i, tag, comm, &reqs.add());
-            }
-        }
-    } else {
-        // create custom datatype to encapsulate the whole message
-        mxx::datatype_contiguous<T> dt(size);
-        MPI_Irecv(const_cast<T*>(out), 1, dt.type(), root, tag, comm, &reqs.add());
-    }
-    reqs.wait();
+    mxx::datatype_contiguous<T> dt(size);
+    MPI_Scatter(const_cast<T*>(msgs), 1, dt.type(), out, 1, dt.type(), root, comm);
 }
 } // namespace impl
 
@@ -645,6 +630,720 @@ std::vector<T> scatterv_recv(int root, const mxx::comm& comm = mxx::comm()) {
 }
 
 
+/*********************************************************************
+ *                              Gather                               *
+ *********************************************************************/
+
+namespace impl {
+/**
+ * @brief   Implementation of `gather()` for large message sizes (> MAX_INT).
+ *
+ * @see mxx::gather
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The size per message. This is the number of elements which
+ *                  are sent by each process. Thus `p*size` is gathered in total.
+ *                  This must be the same value on all processes.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least `p*size`
+ *                  many elements of type `T`.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void gather_big(const T* data, size_t size, T* out, int root, const mxx::comm& comm) {
+    // implementation of scatter for messages sizes that exceed MAX_INT
+    mxx::datatype_contiguous<T> dt(size);
+    MPI_Gather(data, 1, dt.type(), out, 1, dt.type(), root, comm);
+}
+} // namespace impl
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * Gathers a same sized data block from every process to the process
+ * with rank `root`. The gathered data on `root` will be received
+ * into the memory pointed to by `out`, contiguously arranged. The `size`
+ * elements from rank 0 will be first, then the `size` elements from rank `1`,
+ * etc.
+ *
+ * The value of `size` must be the same on all processes.
+ *
+ * @note The memory pointed to by `out` must be allocated to at least a size
+ *       `p*size` on the process with `rank == root`. All other processes may
+ *       pass invalid or `NULL` pointers.
+ *
+ * @see MPI_Gather
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The size per message. This is the number of elements which
+ *                  are sent by each process. Thus `p*size` is gathered in total.
+ *                  This must be the same value on all processes.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least `p*size`
+ *                  many elements of type `T`.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void gather(const T* data, size_t size, T* out, int root, const mxx::comm& comm = mxx::comm()) {
+    if (size*comm.size() >= mxx::max_int) {
+        // use custom implementation for big data
+        impl::gather_big(data, size, out, root, comm);
+    } else {
+        mxx::datatype<T> dt;
+        MPI_Gather(const_cast<T*>(data), size, dt.type(), out, size, dt.type(), root, comm);
+    }
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * This is a convenience function which returns the received data as a
+ * `std::vector`, instead of writing into a given memory segment.
+ *
+ * @see mxx::gather()
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The size per message. This is the number of elements which
+ *                  are sent by each process. Thus `p*size` is gathered in total.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     A `std::vector`. On the `root` process this will contain all
+ *              the gathered data. On all other processes, this vector will
+ *              be empty.
+ */
+template <typename T>
+std::vector<T> gather(const T* data, size_t size, int root, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result;
+    if (comm.rank() == root)
+        result.resize(size*comm.size());
+    gather(data, size, &result[0], root, comm);
+    return std::move(result);
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * This is a convenience function which returns the received data as a
+ * `std::vector`, instead of writing into a given memory segment.
+ * This overload takes a `std::vector` as input intead of 
+ *
+ * @see mxx::gather()
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must have the same size on all processes.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     A `std::vector`. On the `root` process this will contain all
+ *              the gathered data. On all other processes, this vector will
+ *              be empty.
+ */
+template <typename T>
+std::vector<T> gather(const std::vector<T>& data, int root, const mxx::comm& comm = mxx::comm()) {
+    return gather(&data[0], data.size(), root, comm);
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * This is a convenience function which gathers a single element of type `T`
+ * from each process and returns it as a `std::vector` on the root process.
+ *
+ * @see mxx::gather()
+ *
+ * @tparam T        The type of the data.
+ * @param x         The value to be gathered.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     A `std::vector`. On the `root` process this will contain all
+ *              the gathered data. On all other processes, this vector will
+ *              be empty.
+ */
+template <typename T>
+std::vector<T> gather(const T& x, int root, const mxx::comm& comm = mxx::comm()) {
+    return gather(&x, 1, root, comm);
+}
+
+
+/*********************************************************************
+ *                             Gather-V                              *
+ *********************************************************************/
+
+namespace impl {
+
+/**
+ * @brief   Implementation for message sizes larger than MAX_INT elements.
+ *
+ * @see mxx::gatherv()
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least
+ *                  \f$ \sum_{i=0}^{p-1} \texttt{recv\_sizes[i]} \f$
+ *                  many elements of type `T`.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void gatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
+    // implementation of scatter for messages sizes that exceed MAX_INT
+    mxx::requests reqs;
+    int tag = 1234; // TODO: handle tags somewhere (as attributes in the comm?)
+    if (comm.rank() == root) {
+        size_t offset = 0;
+        for (int i = 0; i < comm.size(); ++i) {
+            mxx::datatype_contiguous<T> dt(recv_sizes[i]);
+            if (i == root) {
+                // copy input into output
+                std::copy(data, data+size, out+offset);
+            } else {
+                MPI_Irecv(const_cast<T*>(out)+offset, 1, dt.type(), i, tag, comm, &reqs.add());
+            }
+            offset += recv_sizes[i];
+        }
+    } else {
+        // create custom datatype to encapsulate the whole message
+        mxx::datatype_contiguous<T> dt(size);
+        MPI_Isend(const_cast<T*>(data), 1, dt.type(), root, tag, comm, &reqs.add());
+    }
+    reqs.wait();
+}
+} // namespace impl
+
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * Gathers data from all processes onto the `root` process. In contrast to
+ * the `gather()` function, this function allows gathering a different
+ * number of elements from each process.
+ *
+ * The `recv_sizes` parameter gives the number of elements gathered from
+ * each process in the order as the processes are ordered in the communicator.
+ *
+ * All gathered data is saved contiguously into the memory pointed to by `out`.
+ *
+ * The `gatherv()` function as such is the reverse operation for the `scatterv()`
+ * function.
+ *
+ * @note The memory pointed to by `out` must be allocated to at least a size
+ *       \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$ on the process
+ *       with `rank == root`. All other processes may pass invalid or
+ *       `NULL` pointers.
+ *
+ * @see MPI_Gatherv
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least
+ *                  \f$ \sum_{i=0}^{p-1} \texttt{recv\_sizes[i]} \f$
+ *                  many elements of type `T`.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void gatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
+    size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    mxx::datatype<size_t> mpi_sizet;
+    // tell everybody about the total size
+    MPI_Bcast(&total_size, 1, mpi_sizet.type(), root, comm);
+    if (total_size >= mxx::max_int) {
+        // use custom implementation for large sizes
+        impl::gatherv_big(data, size, out, recv_sizes, root, comm);
+    } else {
+        // use standard MPI_Gatherv
+        mxx::datatype<T> dt;
+        if (comm.rank() == root) {
+            std::vector<int> counts(comm.size());
+            std::copy(recv_sizes.begin(), recv_sizes.end(), counts.begin());
+            std::vector<int> displs = impl::get_displacements(counts);
+            MPI_Gatherv(const_cast<T*>(data), size, dt.type(),
+                        out, &counts[0], &displs[0], dt.type(), root, comm);
+        } else {
+            MPI_Gatherv(const_cast<T*>(data), size, dt.type(),
+                        NULL, NULL, NULL, dt.type(), root, comm);
+        }
+    }
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * Gathers data from all processes onto the `root` process. In contrast to
+ * the `gather()` function, this function allows gathering a different
+ * number of elements from each process.
+ *
+ * @see mxx::gatherv()
+ *
+ * This overload returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$ instead of writing the
+ * gathered elements into a pointer `out`. On non-root processes, the returned
+ * vector will be empty.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector`. On the root process,
+ *              this is a vector of size
+ *              \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$. On non-root
+ *              processes the vector will be empty.
+ */
+template <typename T>
+std::vector<T> gatherv(const T* data, size_t size, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
+    size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    std::vector<T> result(total_size);
+    gatherv(data, size, &result[0], recv_sizes, root, comm);
+    return result;
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * Gathers data from all processes onto the `root` process. In contrast to
+ * the `gather()` function, this function allows gathering a different
+ * number of elements from each process.
+ *
+ * @see mxx::gatherv()
+ *
+ * This overload returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$ instead of writing the
+ * gathered elements into a pointer `out`. On non-root processes, the returned
+ * vector will be empty.
+ * The input to this overload is also a `std::vector`.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector`. On the root process,
+ *              this is a vector of size
+ *              \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$. On non-root
+ *              processes the vector will be empty.
+ */
+template <typename T>
+std::vector<T> gatherv(const std::vector<T>& data, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
+    return gatherv(&data[0], data.size(), recv_sizes, root, comm);
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * This overload assumes that the receive sizes are not known prior to
+ * the gather. As a first step, this function gathers the number of elements
+ * on all processors to the root prior to then gathering the actual elements.
+ *
+ * @see mxx::gatherv()
+ *
+ * This function returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{size@rank(i)} \f$. On non-root processes, the returned
+ * vector will be empty.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector` on the root process.
+ *              On non-rooti processes the vector will be empty.
+ */
+template <typename T>
+std::vector<T> gatherv(const T* data, size_t size, int root, const mxx::comm& comm = mxx::comm()) {
+    // recv_sizes is unknown -> first collect via gather
+    std::vector<size_t> recv_sizes = gather(size, root, comm);
+    return gatherv(data, size, recv_sizes, root, comm);
+}
+
+/**
+ * @brief   Gathers data from all processes onto the root process.
+ *
+ * This overload assumes that the receive sizes are not known prior to
+ * the gather. As a first step, this function gathers the number of elements
+ * on all processors to the root prior to then gathering the actual elements.
+ *
+ * @see mxx::gatherv()
+ *
+ * This function returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{size@rank(i)} \f$. On non-root processes, the returned
+ * vector will be empty.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered.
+ * @param root      The rank of the process which gahters the data from all
+ *                  other processes to itself.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector` on the root process.
+ *              On non-rooti processes the vector will be empty.
+ */
+template <typename T>
+std::vector<T> gatherv(const std::vector<T>& data, int root, const mxx::comm& comm = mxx::comm()) {
+    return gatherv(&data[0], data.size(), root, comm);
+}
+
+
+/*********************************************************************
+ *                           AllGather                               *
+ *********************************************************************/
+
+namespace impl {
+/**
+ * @brief   Implementation of `allgather()` for large message sizes (> MAX_INT).
+ *
+ * @see mxx::allgather
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The size per message. This is the number of elements which
+ *                  are sent by each process. Thus `p*size` is gathered in total.
+ *                  This must be the same value on all processes.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least `p*size`
+ *                  many elements of type `T`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void allgather_big(const T* data, size_t size, T* out, const mxx::comm& comm) {
+    // implementation of scatter for messages sizes that exceed MAX_INT
+    mxx::datatype_contiguous<T> dt(size);
+    MPI_Allgather(const_cast<T*>(data), 1, dt.type(), out, 1, dt.type(), comm);
+}
+} // namespace impl
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * Gathers data which is spread across processes onto each process. At the end
+ * of the operation, each process has all the data. The number of elements
+ * gathered from each process must be the same. In case it is not, use
+ * `allgatherv()` instead.
+ *
+ * The value of `size` must be the same on all processes.
+ *
+ * @note The memory pointed to by `out` must be allocated to at least a size
+ *       `p*size` on all processes.
+ *
+ * @see MPI_Allgather
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The size per message. This is the number of elements which
+ *                  are sent by each process. Thus `p*size` is gathered in total.
+ *                  This must be the same value on all processes.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least `p*size`
+ *                  many elements of type `T`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void allgather(const T* data, size_t size, T* out, const mxx::comm& comm = mxx::comm()) {
+    if (size*comm.size() >= mxx::max_int) {
+        // use custom implementation for big data
+        impl::allgather_big(data, size, out, comm);
+    } else {
+        mxx::datatype<T> dt;
+        MPI_Allgather(const_cast<T*>(data), size, dt.type(), out, size, dt.type(), comm);
+    }
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * This is a convenience function which returns the received data as a
+ * `std::vector`, instead of writing into a given memory segment.
+ *
+ * @see mxx::allgather()
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The size per message. This is the number of elements which
+ *                  are sent by each process. Thus `p*size` is gathered in total.
+ *                  This must be the same value on all processes.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     A `std::vector` containng all the gathered data.
+ */
+template <typename T>
+std::vector<T> allgather(const T* data, size_t size, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result;
+    result.resize(size*comm.size());
+    allgather(data, size, &result[0], comm);
+    return std::move(result);
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * This is a convenience function which returns the received data as a
+ * `std::vector`, instead of writing into a given memory segment.
+ *
+ * @see mxx::allgather()
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must have the same size on all processes.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     A `std::vector` containng all the gathered data.
+ */
+template <typename T>
+std::vector<T> allgather(const std::vector<T>& data, const mxx::comm& comm = mxx::comm()) {
+    return allgather(&data[0], data.size(), comm);
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * This is a convenience function which gathers a single element of type `T`
+ * from each process and returns it as a `std::vector`.
+ *
+ * @see mxx::allgather()
+ *
+ * @tparam T        The type of the data.
+ * @param x         The value to be gathered.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     A `std::vector` containng all the gathered data.
+ */
+template <typename T>
+std::vector<T> allgather(const T& x, const mxx::comm& comm = mxx::comm()) {
+    return allgather(&x, 1, comm);
+}
+
+
+/*********************************************************************
+ *                             Gather-V                              *
+ *********************************************************************/
+
+namespace impl {
+
+/**
+ * @brief   Implementation for message sizes larger than MAX_INT elements.
+ *
+ * @see mxx::allgatherv()
+ *
+ */
+template <typename T>
+void allgatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    // implementation of scatter for messages sizes that exceed MAX_INT
+    mxx::requests reqs;
+    int tag = 1234; // TODO: handle tags somewhere (as attributes in the comm?)
+    size_t offset = 0;
+    for (int i = 0; i < comm.size(); ++i) {
+        // send to this rank
+        mxx::datatype_contiguous<T> senddt(size);
+        MPI_Isend(const_cast<T*>(data), 1, senddt.type(), i, tag, comm, &reqs.add());
+        // receive from this rank
+        mxx::datatype_contiguous<T> dt(recv_sizes[i]);
+        MPI_Irecv(const_cast<T*>(out)+offset, 1, dt.type(), i, tag, comm, &reqs.add());
+        offset += recv_sizes[i];
+    }
+    reqs.wait();
+}
+} // namespace impl
+
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * Gathers data from all processes onto each process. At the end
+ * of the operation, each process has all the data. In contrast to
+ * the `allgather()` function, this function allows gathering a different
+ * number of elements from each process.
+ *
+ * The `recv_sizes` parameter gives the number of elements gathered from
+ * each process in the order as the processes are ordered in the communicator.
+ *
+ * All gathered data is saved contiguously into the memory pointed to by `out`.
+ *
+ * @note The memory pointed to by `out` must be allocated to at least a size
+ *       \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$ on all processes.
+ *
+ * @see MPI_Allgatherv
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param out       Pointer to the output data. On the `root` process, this has
+ *                  to point to valid memory, which can hold at least
+ *                  \f$ \sum_{i=0}^{p-1} \texttt{recv\_sizes[i]} \f$
+ *                  many elements of type `T`.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void allgatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    assert(recv_sizes.size() == comm.size());
+    mxx::datatype<size_t> mpi_sizet;
+    if (total_size >= mxx::max_int) {
+        // use custom implementation for large sizes
+        impl::allgatherv_big(data, size, out, recv_sizes, comm);
+    } else {
+        // use standard MPI_Gatherv
+        mxx::datatype<T> dt;
+        std::vector<int> counts(comm.size());
+        std::copy(recv_sizes.begin(), recv_sizes.end(), counts.begin());
+        std::vector<int> displs = impl::get_displacements(counts);
+        MPI_Allgatherv(const_cast<T*>(data), size, dt.type(),
+                    out, &counts[0], &displs[0], dt.type(), comm);
+    }
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * Gathers data from all processes onto each process. At the end
+ * of the operation, each process has all the data. In contrast to
+ * the `allgather()` function, this function allows gathering a different
+ * number of elements from each process.
+ *
+ * @see mxx::allgatherv()
+ *
+ * This overload returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$ instead of writing the
+ * gathered elements into a pointer `out`. On non-root processes, the returned
+ * vector will be empty.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector` of size
+ *              \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$.
+ */
+template <typename T>
+std::vector<T> allgatherv(const T* data, size_t size, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    std::vector<T> result(total_size);
+    allgatherv(data, size, &result[0], recv_sizes, comm);
+    return result;
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * Gathers data from all processes onto each process. At the end
+ * of the operation, each process has all the data. In contrast to
+ * the `allgather()` function, this function allows gathering a different
+ * number of elements from each process.
+ *
+ * @see mxx::allgatherv()
+ *
+ * This overload returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$ instead of writing the
+ * gathered elements into a pointer `out`. On non-root processes, the returned
+ * vector will be empty.
+ * The input to this overload is also a `std::vector`.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered.
+ * @param recv_sizes    The number of elements received per process. This has
+ *                      to be of size `p` on process `root`. On other processes
+ *                      this can be an empty `std::vector`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector` of size
+ *              \f$ \sum_{i=0}^{p-1} \texttt{recv_sizes[i]} \f$.
+ */
+template <typename T>
+std::vector<T> allgatherv(const std::vector<T>& data, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    return allgatherv(&data[0], data.size(), recv_sizes, comm);
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * This overload assumes that the receive sizes are not known prior to
+ * the gather. As a first step, this function gathers the number of elements
+ * on all processors to the root prior to then gathering the actual elements.
+ *
+ * @see mxx::allgatherv()
+ *
+ * This function returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{size@rank(i)} \f$.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered. Must be of size `size`.
+ * @param size      The number of elements send from this process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> allgatherv(const T* data, size_t size, const mxx::comm& comm = mxx::comm()) {
+    // recv_sizes is unknown -> first collect via gather
+    std::vector<size_t> recv_sizes = allgather(size, comm);
+    return allgatherv(data, size, recv_sizes, comm);
+}
+
+/**
+ * @brief   Gathers data from all processes onto each process.
+ *
+ * This overload assumes that the receive sizes are not known prior to
+ * the gather. As a first step, this function gathers the number of elements
+ * on all processors to the root prior to then gathering the actual elements.
+ *
+ * @see mxx::allgatherv()
+ *
+ * This function returns a `std::vector` of size
+ * \f$ \sum_{i=0}^{p-1} \texttt{size@rank(i)} \f$.
+ *
+ * @tparam T        The type of the data.
+ * @param data      The data to be gathered.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The gathered data as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> allgatherv(const std::vector<T>& data, const mxx::comm& comm = mxx::comm()) {
+    return allgatherv(&data[0], data.size(), comm);
+}
+
+// TODO: tests for gather(v)/allgather(v)
+// TODO: all2all(v)
 
 } // namespace mxx
 
