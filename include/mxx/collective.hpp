@@ -656,7 +656,7 @@ template <typename T>
 void gather_big(const T* data, size_t size, T* out, int root, const mxx::comm& comm) {
     // implementation of scatter for messages sizes that exceed MAX_INT
     mxx::datatype_contiguous<T> dt(size);
-    MPI_Gather(data, 1, dt.type(), out, 1, dt.type(), root, comm);
+    MPI_Gather(const_cast<T*>(data), 1, dt.type(), out, 1, dt.type(), root, comm);
 }
 } // namespace impl
 
