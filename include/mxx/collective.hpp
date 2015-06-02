@@ -1342,8 +1342,311 @@ std::vector<T> allgatherv(const std::vector<T>& data, const mxx::comm& comm = mx
     return allgatherv(&data[0], data.size(), comm);
 }
 
-// TODO: tests for gather(v)/allgather(v)
-// TODO: all2all(v)
+
+/*********************************************************************
+ *                            All-to-all                             *
+ *********************************************************************/
+
+namespace impl {
+
+/**
+ * @brief   `all2all()` implementation for message sizes larger than MAX_INT.
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param size      The number of elements to send to each process. The `msgs` pointer
+ *                  must contain `p*size` elements.
+ * @param out       Pointer to memory for writing the received messages. Must be
+ *                  able to hold at least `p*size` many elements of type `T`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void all2all_big(const T* msgs, size_t size, T* out, const mxx::comm& comm = mxx::comm()) {
+    datatype_contiguous<T> bigtype(size);
+    MPI_Alltoall(const_cast<T*>(msgs), 1, bigtype.type(), out, 1, bigtype.type(), comm);
+}
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * Each process contains `p = comm.size()` messages, one for each process, and
+ * each containing `size` many elements of type `T`. This function sends each
+ * message (the `size` many elements) to its designated target process.
+ * Elements and messages are read and written from and into continuous memory.
+ *
+ * @see MPI_Alltoall
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param size      The number of elements to send to each process. The `msgs` pointer
+ *                  must contain `p*size` elements.
+ * @param out       Pointer to memory for writing the received messages. Must be
+ *                  able to hold at least `p*size` many elements of type `T`.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void all2all(const T* msgs, size_t size, T* out, const mxx::comm& comm = mxx::comm()) {
+    if (size*comm.size() >= mxx::max_int) {
+        impl::all2all_big(msgs, size, out, comm);
+    } else {
+        mxx::datatype<T> dt;
+        MPI_Alltoall(const_cast<T*>(msgs), size, dt.type(), out, size, dt.type(), comm);
+    }
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This overload returns a `size*p` size `std::vector` with the received
+ * elements instead of writing output to given memory.
+ *
+ * @see mxx::all2all
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param size      The number of elements to send to each process. The `msgs` pointer
+ *                  must contain `p*size` elements.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The received messages as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> all2all(const T* msgs, size_t size, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(size*comm.size());
+    all2all(msgs, size, &result[0], comm);
+    return result;
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This overload takes a `std::vector` `msgs` for the messages to be send out.
+ * The size of `msgs` must be a multiple of the number of processes in the
+ * communicator `p`. This function then sends `msgs.size() / p` elements
+ * to each process.
+ *
+ * This overload returns a `size*p` size `std::vector` with the received
+ * elements instead of writing output to given memory.
+ *
+ * @see mxx::all2all
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      A `std::vector` containing elements for each process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     the received messages as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> all2all(const std::vector<T>& msgs, const mxx::comm& comm = mxx::comm()) {
+    assert(msgs.size() % comm.size() == 0);
+    size_t size = msgs.size() / comm.size();
+    std::vector<T> result = all2all(&msgs[0], size, comm);
+    return result;
+}
+
+
+/*********************************************************************
+ *                           All-to-all-V                            *
+ *********************************************************************/
+
+namespace impl {
+/**
+ * @brief   Implementation for `mxx::all2allv()` for messages sizes larger than MAX_INT
+ *
+ * @see mxx::all2allv()
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param out       Pointer to memory for writing the received messages.
+ * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be received from each process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void all2allv_big(const T* msgs, const std::vector<size_t>& send_sizes, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    // point-to-point implementation
+    // TODO: implement MPI_Alltoallw variant
+    // TODO: try RMA
+    assert(send_sizes.size() == comm.size());
+    assert(recv_sizes.size() == comm.size());
+    std::vector<size_t> send_displs = impl::get_displacements(send_sizes);
+    std::vector<size_t> recv_displs = impl::get_displacements(recv_sizes);
+    // TODO: unify tag usage
+    int tag = 12345;
+    // implementing this using point-to-point communication!
+    // dispatch receives
+    mxx::requests reqs;
+    for (int i = 0; i < comm.size(); ++i) {
+        // start with self send/recv
+        int recv_from = (comm.rank() + (comm.size()-i)) % comm.size();
+        datatype_contiguous<T> bigtype(recv_sizes[recv_from]);
+        MPI_Irecv(const_cast<T*>(&(*out)) + recv_displs[recv_from], 1, bigtype.type(),
+                  recv_from, tag, comm, &reqs.add());
+    }
+    // dispatch sends
+    for (int i = 0; i < comm.size(); ++i) {
+        int send_to = (comm.rank() + i) % comm.size();
+        datatype_contiguous<T> bigtype(send_sizes[send_to]);
+        MPI_Isend(const_cast<T*>(msgs)+send_displs[send_to], 1, bigtype.type(), send_to,
+                  tag, comm, &reqs.add());
+    }
+
+    reqs.wait();
+}
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This function if for the case that the number of elements send to and received
+ * from each process is not always the same, such that `all2all()` can not
+ * be used.
+ *
+ * The number of elements send to each process from this process are given
+ * by the parameter `send_sizes`.
+ * The number of elements received from each process to this process are given
+ * by the parameter `recv_sizes`.
+ *
+ * @see MPI_Alltoallv
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param out       Pointer to memory for writing the received messages.
+ * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be received from each process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), 0);
+    size_t total_recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    size_t local_max_size = std::max(total_send_size, total_recv_size);
+    mxx::datatype<size_t> mpi_sizet;
+    size_t max;
+    MPI_Allreduce(&local_max_size, &max, 1, mpi_sizet.type(), MPI_MAX, comm);
+    if (max >= mxx::max_int) {
+        all2allv_big(msgs, send_sizes, out, recv_sizes, comm);
+    } else {
+        // convert vectors to integer counts
+        std::vector<int> send_counts(send_sizes.begin(), send_sizes.end());
+        std::vector<int> recv_counts(recv_sizes.begin(), recv_sizes.end());
+        // get displacements
+        std::vector<int> send_displs = impl::get_displacements(send_counts);
+        std::vector<int> recv_displs = impl::get_displacements(recv_counts);
+        // call regular alltoallv
+        mxx::datatype<T> dt;
+        MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_displs[0], dt.type(),
+                      out, &recv_counts[0], &recv_displs[0], dt.type(), comm);
+    }
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This overload returns a `std::vector` with the received data, instead of
+ * writing into an output pointer `out`.
+ *
+ * @see all2allv()
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be received from each process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The received messages as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    size_t recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    std::vector<T> result(recv_size);
+    return all2allv(msgs, send_sizes, &result[0], recv_sizes, comm);
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This overload takes a `std::vector` as input and returns
+ *  a `std::vector` with the received data, instead of
+ * writing into an output pointer `out`.
+ *
+ * @see all2allv()
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      `std::vector` containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be received from each process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The received messages as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& send_sizes, const std::vector<T>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+    assert(msgs.size() == std::accumulate(send_sizes.begin(), send_sizes.end(), 0));
+    return all2allv(&msgs[0], send_sizes, recv_sizes, comm);
+}
+
+// unknown receive size:
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This function assumes that the `recv_sizes` are not known prior to executing
+ * an `all2allv()`. Hence, this function first communicates the number of elements
+ * send to each process, prior to executing a `all2allv()`.
+ *
+ * This overload takes a `std::vector` as input.
+ *
+ * @see all2allv()
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The received messages as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const mxx::comm& comm = mxx::comm()) {
+    // first get recv sizes
+    assert(send_sizes.size() == comm.size());
+    std::vector<size_t> recv_sizes = all2all(send_sizes, comm);
+    return all2allv(msgs, send_sizes, recv_sizes, comm);
+}
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This function assumes that the `recv_sizes` are not known prior to executing
+ * an `all2allv()`. Hence, this function first communicates the number of elements
+ * send to each process, prior to executing a `all2allv()`.
+ *
+ * This overload takes a `std::vector` as input.
+ *
+ * @see all2allv()
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      `std::vector` containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ *
+ * @returns     The received messages as a `std::vector`.
+ */
+template <typename T>
+std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& send_sizes, const mxx::comm& comm = mxx::comm()) {
+    return all2allv(&msgs[0], send_sizes, comm);
+}
+
 
 } // namespace mxx
 
