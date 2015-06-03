@@ -1,8 +1,8 @@
 /**
  * @file    collective.hpp
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   Collective operations.
  * @group   collective
+ * @brief   Collective operations.
  *
  * @detail
  *
@@ -1530,7 +1530,7 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
     size_t max;
     MPI_Allreduce(&local_max_size, &max, 1, mpi_sizet.type(), MPI_MAX, comm);
     if (max >= mxx::max_int) {
-        all2allv_big(msgs, send_sizes, out, recv_sizes, comm);
+        impl::all2allv_big(msgs, send_sizes, out, recv_sizes, comm);
     } else {
         // convert vectors to integer counts
         std::vector<int> send_counts(send_sizes.begin(), send_sizes.end());
@@ -1567,7 +1567,8 @@ template <typename T>
 std::vector<T> all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
     size_t recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
     std::vector<T> result(recv_size);
-    return all2allv(msgs, send_sizes, &result[0], recv_sizes, comm);
+    all2allv(msgs, send_sizes, &result[0], recv_sizes, comm);
+    return result;
 }
 
 /**
@@ -1590,7 +1591,7 @@ std::vector<T> all2allv(const T* msgs, const std::vector<size_t>& send_sizes, co
  * @returns     The received messages as a `std::vector`.
  */
 template <typename T>
-std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& send_sizes, const std::vector<T>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
     assert(msgs.size() == std::accumulate(send_sizes.begin(), send_sizes.end(), 0));
     return all2allv(&msgs[0], send_sizes, recv_sizes, comm);
 }

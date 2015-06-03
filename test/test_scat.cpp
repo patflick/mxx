@@ -523,3 +523,132 @@ TEST(MxxColl, AllgathervUnknownSize) {
         }
     }
 }
+
+TEST(MxxColl, All2allOne) {
+    mxx::comm c;
+    srand(0); // make test reproducable
+
+    // create single message for each processor
+    std::vector<std::pair<int, int> > msgs(c.size());
+    for (int i = 0; i < c.size(); ++i) {
+        msgs[i].first = c.rank() * i;
+        msgs[i].second = rand();
+    }
+
+    // first all2all
+    std::vector<std::pair<int, int> > result(c.size());
+    mxx::all2all(&msgs[0], 1, &result[0], c);
+    for (int i = 0; i < c.size(); ++i) {
+        ASSERT_EQ(i*c.rank(), result[i].first);
+        // change the random number
+        result[i].second /= 13;
+    }
+
+    // send back
+    std::vector<std::pair<int, int> > result2 = mxx::all2all(result, c);
+    ASSERT_EQ(c.size(), result2.size());
+    // check the result
+    for (int i = 0; i < c.size(); ++i) {
+        ASSERT_EQ(i*c.rank(), result2[i].first);
+        ASSERT_EQ(msgs[i].second / 13, result2[i].second);
+    }
+
+    // test the last convenience function
+    std::vector<std::pair<int, int> > result3 = mxx::all2all(&result2[0], 1);
+    // check result
+    ASSERT_EQ(c.size(), result3.size());
+    for (int i = 0; i < c.size(); ++i) {
+        ASSERT_EQ(result[i].first, result3[i].first);
+        ASSERT_EQ(result[i].second, result3[i].second);
+    }
+}
+
+TEST(MxxColl, All2allGeneral) {
+    mxx::comm c;
+
+    int size = 230;
+    std::vector<int> msgs(size*c.size());
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < size; ++j) {
+            msgs[i*size + j] = i*c.rank()*33 - 2*j;
+        }
+    }
+
+    std::vector<int> result = mxx::all2all(msgs);
+    ASSERT_EQ(size*c.size(), result.size());
+    for (int i = 0; i < c.size(); ++i) {
+        for (int j = 0; j < size; ++j) {
+            ASSERT_EQ(i*c.rank()*33 - 2*j, result[i*size + j]);
+        }
+    }
+}
+
+TEST(MxxColl, All2allvGeneral) {
+    mxx::comm c;
+
+    srand(0); // make test reproducable
+    std::vector<size_t> send_counts(c.size());
+    std::vector<size_t> recv_counts(c.size());
+    std::vector<std::pair<int, double> > msgs;
+    for (int i = 0; i < c.size(); ++i) {
+        send_counts[i] = 2*c.rank() + 3*(c.size()-i-1);
+        recv_counts[i] = 2*i + 3*(c.size()-c.rank()-1);
+        for (size_t j = 0; j < send_counts[i]; ++j) {
+            msgs.push_back(std::make_pair(c.rank()*i, 1.0 / rand()));
+        }
+    }
+    size_t recv_size = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
+
+    // send one way
+    std::vector<std::pair<int, double> > result = mxx::all2allv(msgs, send_counts, recv_counts, c);
+
+    ASSERT_EQ(recv_size, result.size());
+    std::vector<std::pair<int, double> >::iterator it = result.begin();
+    for (int i = 0; i < c.size(); ++i) {
+        for (size_t j = 0; j < recv_counts[i]; ++j) {
+            ASSERT_EQ(i*c.rank(), it->first);
+            // square the double:
+            it->second *= it->second;
+            it++;
+        }
+    }
+
+    // send back
+    std::vector<std::pair<int, double> > result2 = mxx::all2allv(&result[0], recv_counts, send_counts);
+
+    // check that the msgs and result2 are same in first and squared in second
+    ASSERT_EQ(msgs.size(), result2.size());
+    for (size_t i = 0; i < result2.size(); ++i) {
+        ASSERT_EQ(msgs[i].first, result2[i].first);
+        ASSERT_EQ(msgs[i].second*msgs[i].second, result2[i].second);
+    }
+}
+
+TEST(MxxColl, All2allvUnknownSize) {
+    mxx::comm c;
+
+    std::vector<size_t> send_counts(c.size());
+    std::vector<char> msgs;
+    for (int i = 0; i < c.size(); ++i) {
+        send_counts[i] = (i + c.rank()) % c.size() + 3;
+        for (size_t j = 0; j < send_counts[i]; ++j) {
+            msgs.push_back('A'+i+j+c.rank());
+        }
+    }
+
+    // send without knowing the receive count
+    std::vector<char> result = mxx::all2allv(msgs, send_counts, c);
+
+    // get the expected receive counts
+    std::vector<size_t> actual_recv_count = mxx::all2all(send_counts);
+    size_t recv_size = std::accumulate(actual_recv_count.begin(), actual_recv_count.end(), 0);
+
+    ASSERT_EQ(recv_size, result.size());
+    std::vector<char>::iterator it = result.begin();
+    for (int i = 0; i < c.size(); ++i) {
+        for (size_t j = 0; j < actual_recv_count[i]; ++j) {
+            ASSERT_EQ('A'+i+c.rank()+j, *it);
+            it++;
+        }
+    }
+}
