@@ -10,8 +10,11 @@ project(mxx-test)
 add_library(mpi_gtest mpi_gtest.cpp ../ext/gtest/gtest-all.cc)
 target_link_libraries(mpi_gtest ${EXTRA_LIBS} pthread)
 
-add_executable(test_scat test_scat.cpp)
-target_link_libraries(test_scat mpi_gtest)
+add_executable(test-scat test_scat.cpp)
+target_link_libraries(test-scat mpi_gtest)
+
+add_executable(test-reductions test_reductions.cpp)
+target_link_libraries(test-reductions mpi_gtest)
 
 ################
 #  Old tests:  #
