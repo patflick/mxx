@@ -125,7 +125,7 @@ TEST(MxxReduce, ReduceOne) {
     }
     // test own function pointer
     int v = c.rank() + 1;
-    int u = mxx::reduce(v, 0, &mymin, c);
+    int u = mxx::reduce(v, 0, mymin, c);
     if (c.rank() == 0) {
         ASSERT_EQ(1, u);
     } else {

@@ -115,7 +115,6 @@ MXX_BUILTIN_OP(MPI_BAND, std::bit_and);
 
 
 // for std::min/std::max functions
-// TODO: this doesn't find the type if it is passed as Func& func in custom_op constructor
 template <typename T>
 struct get_builtin_op<T, const T&(*) (const T&, const T&)> {
     static MPI_Op op(const T& (*t)(const T&, const T&)) {
@@ -155,16 +154,11 @@ public:
      * @param func      The instance of the functor.
      */
     template <typename Func>
-    custom_op(Func& func) : builtin(false) {
+    custom_op(Func func) : builtin(false) {
         if (mxx::is_builtin_type<T>::value) {
             // check if the operator is MPI built-in (in case the type
             // is also a MPI built-in type)
-            // TODO: somehow having `func` as a reference parameter
-            //       vs non reference parameter messes up different
-            //       test cases. what's going on??
-            // TODO: quetsion is: how are function pointers passed when
-            //       the input parameter is a reference of templated type???
-            MPI_Op o = get_builtin_op<T, Func>::op(func);
+            MPI_Op o = get_builtin_op<T, Func>::op(std::forward<Func>(func));
             if (o != MPI_OP_NULL) {
                 // this op is builtin, save it as such and don't copy built-in type
                 builtin = true;
@@ -175,26 +169,18 @@ public:
         }
         if (!builtin) {
             // create user function
-            typedef std::function<void(void*,void*,int*)> func_t;
-            func_t user_func = [&func](void* invec, void* inoutvec, int* len) {
-                T* in = (T*) invec;
-                T* inout = (T*) inoutvec;
-                for (int i = 0; i < *len; ++i) {
-                    std::cout << "i=" << i << ", len = " << *len << ", in[i]=" << in[i] << ", inout[i]=" << inout[i] << std::endl;
-                    std::cout << "&f=" << &func << std::endl;
-                    //std::cout << "f=" << func << std::endl;
-                    inout[i] = func(in[i], inout[i]);
-                }
-            };
+            using namespace std::placeholders;
+            user_func = std::bind(custom_op::custom_function<Func>, std::forward<Func>(func), _1, _2, _3);
             // get datatype associated with the type `T`
             mxx::datatype<T> dt;
             // attach function to a copy of the datatype
             MPI_Type_dup(dt.type(), &type_copy);
             attr_map<int, func_t>::set(type_copy, 1347, user_func);
             // create op
-            MPI_Op_create(&custom_op::user_function, IsCommutative, &op);
+            MPI_Op_create(&custom_op::mpi_user_function, IsCommutative, &op);
         }
     }
+
 
     /**
      * @brief   Returns the MPI_Datatype which has to be used in conjuction
@@ -235,14 +221,30 @@ public:
         }
     }
 private:
+    // Apply the user provided function to all elements passed by MPI.
+    // The user provided function (lambda, function pointer, functor)
+    // is bound to this function via std::bind, and the resulting object
+    // saved in the MPI_Datatype
+    template <typename Func>
+    static void custom_function(Func func, void* invec, void* inoutvec, int* len) {
+        T* in = (T*) invec;
+        T* inout = (T*) inoutvec;
+        for (int i = 0; i < *len; ++i) {
+            inout[i] = func(in[i], inout[i]);
+        }
+    }
     // MPI custom Op function: (of type MPI_User_function)
-    static void user_function(void* in, void* inout, int* n, MPI_Datatype* dt) {
+    // This function is called from within MPI
+    static void mpi_user_function(void* in, void* inout, int* n, MPI_Datatype* dt) {
         // get the std::function from the MPI_Datatype and call it
         typedef std::function<void(void*,void*,int*)> func_t;
         func_t f = attr_map<int, func_t>::get(*dt, 1347);
         f(in, inout, n);
     }
 
+    // the std::function user function wrapper, which is called from the mpi user function
+    typedef std::function<void(void*,void*,int*)> func_t;
+    func_t user_func;
     /// Whether the MPI_Op is a builtin operator (e.g. MPI_SUM)
     bool builtin;
     /// The copy (Type_dup) of the MPI_Datatype to work on
@@ -265,7 +267,7 @@ private:
 template <typename T, typename Func>
 T reduce(const T& x, int root, Func func, const mxx::comm& comm = mxx::comm()) {
     // get custom op (and type for custom op)
-    mxx::custom_op<T> op(func);
+    mxx::custom_op<T> op(std::forward<Func>(func));
     T result = T();
     MPI_Reduce(const_cast<T*>(&x), &result, 1, op.get_type(), op.get_op(), root, comm);
     return result;
@@ -281,7 +283,7 @@ T reduce(const T& x, int root, const mxx::comm& comm = mxx::comm()) {
 template <typename T, typename Func>
 T allreduce(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     // get custom op (and type for custom op)
-    mxx::custom_op<T> op(func);
+    mxx::custom_op<T> op(std::forward<Func>(func));
     // perform reduction
     T result;
     MPI_Allreduce(const_cast<T*>(&x), &result, 1, op.get_type(), op.get_op(), comm);
@@ -296,7 +298,7 @@ T allreduce(const T& x, const mxx::comm& comm = mxx::comm()) {
 template <typename T, typename Func>
 T scan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     // get op
-    mxx::custom_op<T> op(func);
+    mxx::custom_op<T> op(std::forward<Func>(func));
     T result;
     MPI_Scan(const_cast<T*>(&x), &result, 1, op.get_type(), op.get_op(), comm);
     return result;
@@ -310,7 +312,7 @@ T scan(const T& x, const mxx::comm& comm = mxx::comm()) {
 template <typename T, typename Func>
 T exscan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     // get op
-    mxx::custom_op<T> op(func);
+    mxx::custom_op<T> op(std::forward<Func>(func));
     // perform reduction
     T result;
     MPI_Exscan(const_cast<T*>(&x), &result, 1, op.get_type(), op.get_op(), comm);
