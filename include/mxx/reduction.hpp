@@ -6,7 +6,6 @@
  * TODO add Licence
  */
 
-
 #ifndef MXX_REDUCTION_HPP
 #define MXX_REDUCTION_HPP
 
@@ -97,9 +96,9 @@ struct get_builtin_op {
 // to that builtin MPI_Op
 #define MXX_BUILTIN_OP(mpi_op, cpp_functor)                                    \
 template <typename T>                                                          \
-struct get_builtin_op<T, cpp_functor<T> > {                                      \
-    static MPI_Op op(cpp_functor<T>) {                                           \
-        return mpi_op;                                                        \
+struct get_builtin_op<T, cpp_functor<T> > {                                    \
+    static MPI_Op op(cpp_functor<T>) {                                         \
+        return mpi_op;                                                         \
     }                                                                          \
 };                                                                             \
 
@@ -130,7 +129,6 @@ struct get_builtin_op<T, const T&(*) (const T&, const T&)> {
     }
 };
 
-
 /**
  * @brief   Wrapps a binary combination/reduction operator for MPI use in
  *          custom operators.
@@ -154,30 +152,31 @@ public:
      * @param func      The instance of the functor.
      */
     template <typename Func>
-    custom_op(Func func) : builtin(false) {
+    custom_op(Func func) : m_builtin(false) {
         if (mxx::is_builtin_type<T>::value) {
             // check if the operator is MPI built-in (in case the type
             // is also a MPI built-in type)
-            MPI_Op o = get_builtin_op<T, Func>::op(std::forward<Func>(func));
-            if (o != MPI_OP_NULL) {
+            MPI_Op op = get_builtin_op<T, Func>::op(std::forward<Func>(func));
+            if (op != MPI_OP_NULL) {
                 // this op is builtin, save it as such and don't copy built-in type
-                builtin = true;
-                op = o;
+                m_builtin = true;
+                m_op = op;
                 mxx::datatype<T> dt;
-                type_copy = dt.type();
+                m_type_copy = dt.type();
             }
         }
-        if (!builtin) {
+        if (!m_builtin) {
             // create user function
             using namespace std::placeholders;
-            user_func = std::bind(custom_op::custom_function<Func>, std::forward<Func>(func), _1, _2, _3);
+            m_user_func = std::bind(custom_op::custom_function<Func>,
+                                  std::forward<Func>(func), _1, _2, _3);
             // get datatype associated with the type `T`
             mxx::datatype<T> dt;
             // attach function to a copy of the datatype
-            MPI_Type_dup(dt.type(), &type_copy);
-            attr_map<int, func_t>::set(type_copy, 1347, user_func);
+            MPI_Type_dup(dt.type(), &m_type_copy);
+            attr_map<int, func_t>::set(m_type_copy, 1347, m_user_func);
             // create op
-            MPI_Op_create(&custom_op::mpi_user_function, IsCommutative, &op);
+            MPI_Op_create(&custom_op::mpi_user_function, IsCommutative, &m_op);
         }
     }
 
@@ -196,7 +195,7 @@ public:
      *          `MPI_Op` returned by `get_op()` for all MPI reduction operations.
      */
     MPI_Datatype get_type() const {
-        return type_copy;
+        return m_type_copy;
     }
 
     /**
@@ -209,15 +208,15 @@ public:
      * @returns     The MPI operator as `MPI_Op` object.
      */
     MPI_Op get_op() const {
-        return op;
+        return m_op;
     }
 
     /// Destructor: cleanup MPI objects
     virtual ~custom_op() {
-        if (!builtin) {
+        if (!m_builtin) {
             // clean-up (only if this wasn't a built-in MPI_Op)
-            MPI_Op_free(&op);
-            MPI_Type_free(&type_copy);
+            MPI_Op_free(&m_op);
+            MPI_Type_free(&m_type_copy);
         }
     }
 private:
@@ -244,13 +243,13 @@ private:
 
     // the std::function user function wrapper, which is called from the mpi user function
     typedef std::function<void(void*,void*,int*)> func_t;
-    func_t user_func;
+    func_t m_user_func;
     /// Whether the MPI_Op is a builtin operator (e.g. MPI_SUM)
-    bool builtin;
+    bool m_builtin;
     /// The copy (Type_dup) of the MPI_Datatype to work on
-    MPI_Datatype type_copy;
+    MPI_Datatype m_type_copy;
     /// The MPI user operator
-    MPI_Op op;
+    MPI_Op m_op;
 };
 
 
@@ -260,9 +259,11 @@ private:
 // TODO: add more (vectorized (std::vector, [begin,end),...), different reduce ops, etc)
 // TODO: naming of functions !?
 // TODO: come up with good naming scheme and standardize!
-// TODO: template specialize for std::min, std::max, std::plus, std::multiply
-//       etc for integers to use MPI builtin ops?
 
+template <typename T, typename Func>
+void reduce(const T* in, size_t n, const T* out, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+
+}
 
 template <typename T, typename Func>
 T reduce(const T& x, int root, Func func, const mxx::comm& comm = mxx::comm()) {
