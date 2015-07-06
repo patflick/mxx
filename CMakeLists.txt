@@ -38,6 +38,18 @@ else (MPI_FOUND)
     message(SEND_ERROR "This application cannot compile without MPI")
 endif (MPI_FOUND)
 
+#### Doxygen
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+  message(STATUS "Found Doxygen")
+  message(STATUS "    use `make doc` to build documentation")
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
+  add_custom_target(doc
+    ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs
+    COMMENT "Generating API documentation with Doxygen" VERBATIM
+  )
+endif(DOXYGEN_FOUND)
 
 ###### Executable and Libraries
 # Save libs and executables in the same place
