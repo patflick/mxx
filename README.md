@@ -14,12 +14,15 @@ development, prototyping, and deployment.
 ### Features
 
 
--  All functions are templated by type. No manual `MPI_Datatype` selection
-   necessary.
--  Reduction operations accept a templated functor and thus accept lambda
-   functions.
+-  All functions are templated by type. All `MPI_Datatype` are deducted
+   from the C++ type given to the function.
+-  Custom reduction operations as lambdas, `std::function`, functor, or function
+   pointer.
 -  Send/Receive and Collective operations take `size_t` sized input and
    automatically handle sizes larger than `INT_MAX`.
+-  Plenty of convenience functions and overloads for common MPI operations with
+   sane defaults (e.g., super easy collectives: `std::vector<size_t> allsizes =
+   mxx::allgather(local_size)`).
 -  Automatic type mapping of all built-in (`int`, `double`, etc) and other
    C++ types such as `std::tuple`, `std::pair`, and `std::array`.
 -  Non-blocking operations return a `mxx::future<T>` object, similar to
@@ -44,10 +47,27 @@ Currently `mxx` is just a small personal project at very early stages.
 
 ### Examples
 
+#### Collective Operations
+
+This example shows the main features of `mxx`'s wrappers for MPI collective
+operations:
+
+-   `MPI_Datatype` deduction according to the template type
+-   Handling of message sizes larger than `INT_MAX` (everything is `size_t`
+    enabled)
+-   Receive sizes do not have to be specified
+-   convenience functions for `std::vector`, both for sending and receiving
+
+```c++
+    // local numbers, can be different size on each process
+    std::vector<size_t> local_numbers = ...;
+    // allgather the local numbers, easy as pie:
+    std::vector<size_t> all_numbers = mxx::allgatherv(local_numbers, MPI_COMM_WORLD);
+```
+
 #### Reductions
 
-The following example showcases the C++11 interface to reductions and
-the general usage of `mxx`:
+The following example showcases the C++11 interface to reductions:
 
 ```c++
     #include <mxx/reduction.hpp>
@@ -55,9 +75,11 @@ the general usage of `mxx`:
     // ...
     // lets take some pairs and find the one with the max second element
     std::pair<int, double> v = ...;
-    mxx::allreduce(v, [](const std::pair<int, double>& x, const std::pair<int, double>& y){
-                           return x.second > y.second ? x : y;
-                        });
+    std::pair<int, double> min_pair = mxx::allreduce(v,
+                           [](const std::pair<int, double>& x,
+                              const std::pair<int, double>& y){
+                               return x.second > y.second ? x : y;
+                           });
 ```
 What happens here, is that the C++ types are automatically matched to the
 appropriate `MPI_Datatype` (struct of `MPI_INT` and `MPI_DOUBLE`),
