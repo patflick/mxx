@@ -260,10 +260,23 @@ private:
 // TODO: naming of functions !?
 // TODO: come up with good naming scheme and standardize!
 
+// TODO: ptr+size vs [begin,end)
+/*
 template <typename T, typename Func>
 void reduce(const T* in, size_t n, const T* out, int root, Func func, const mxx::comm& comm = mxx::comm()) {
 
 }
+template <typename T, typename Func>
+std::vector<T> reduce(const T* in, size_t n, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+
+}
+
+template <typename T, typename Func>
+std::vector<T> reduce(const std::vector<T>& in, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+
+}
+*/
+
 
 template <typename T, typename Func>
 T reduce(const T& x, int root, Func func, const mxx::comm& comm = mxx::comm()) {

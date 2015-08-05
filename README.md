@@ -4,14 +4,64 @@ mxx
 `mxx` is a `C++`/`C++11` template library for `MPI`. The main goal of this
 library is to provide two things:
 
-1. Simplified, efficient, and type-safe C++ bindings to common MPI operations.
+1. Simplified, efficient, and type-safe C++11 bindings to common MPI operations.
 2. A collection of scalable, high-performance standard algorithms for parallel
-   distributed memory architectures. We hope to supply most C++ STL
-   algorithms for use in an MPI environment. Scalability and efficiency are of
-   utmost importance in `mxx`.
+   distributed memory architectures, such as sorting.
 
 As such, `mxx` is targeting use in rapid `C++` and `MPI` algorithm
 development, prototyping, and deployment.
+
+### Features
+
+
+-  All functions are templated by type. No manual `MPI_Datatype` selection
+   necessary.
+-  Reduction operations accept a templated functor and thus accept lambda
+   functions.
+-  Send/Receive and Collective operations take `size_t` sized input and
+   automatically handle sizes larger than `INT_MAX`.
+-  Automatic type mapping of all built-in (`int`, `double`, etc) and other
+   C++ types such as `std::tuple`, `std::pair`, and `std::array`.
+-  Non-blocking operations return a `mxx::future<T>` object, similar to
+   `std::future`.
+-  Google Test based `MPI` unit testing framework
+-  Parallel sorting with similar API than `std::sort` (`mxx::sort`)
+
+### Planned
+
+- Parallel random number engines (for use with `C++11` standard library distributions)
+- More parallel (standard) algorithms
+- Wrappers for non-blocking collectives
+- (maybe) serialization/de-serialization of non contiguous data types
+- macros for easy datatype creation and handling for custom/own structs and classes
+- Implementing and tuning different sorting algorithms
+- Communicator classes for different topologies
+- `mxx::env` similar to `boost::mpi::env` for wrapping `MPI_Init` and `MPI_Finalize`
+
+### Status
+
+Currently `mxx` is just a small personal project at very early stages.
+
+### Examples
+
+#### Reductions
+
+The following example showcases the C++11 interface to reductions and
+the general usage of `mxx`:
+
+```c++
+    // lets take some pairs and find the one with the max second element
+    std::pair<int, double> v = ...;
+    mxx::allreduce(v, [](const std::pair<int, double>& x, const std::pair<int, double>& y){
+                           return x.second > y.second ? x : y;
+                        });
+```
+What happens here is that the types are automatically matched to the
+appropriate `MPI_Datatype` (struct of `MPI_INT` and `MPI_DOUBLE`),
+then a custom reduction operator is created from
+the given lambda, and then `MPI_Allreduce` called underneath.
+
+#### Sorting
 
 Consider a simple example, where you might want to sort tuples `(int key,double
 x, double y)` by key `key` in parallel using `MPI`. Doing so in pure C/MPI
@@ -43,15 +93,10 @@ In the background, `mxx` performs many things, including (but not limited to):
 - redistributing the data so that it has the same distribution as given in the
   input to `mxx::sort`
 
-### Status
 
-Currently `mxx` is still at very early stages. Its growing organically during
-our parallel algorithm development, but we hope that it will some day reach a
-point of maturity.
+### Alternatives?
 
-### Competition
-
-To our knowledge, there are two noteworthy, similar libraries available.
+To our knowledge, there are two noteworthy, similar open libraries available.
 
 1. [**boost::mpi**](https://github.com/boostorg/mpi) offers C++ bindings for a
    large number of MPI functions. As such it corresponds to our main goal *1*.
@@ -65,11 +110,11 @@ To our knowledge, there are two noteworthy, similar libraries available.
    shows better performance than *boost::mpi*, but was never continued beyond
    point-to-point communication.
 
-## Authors
+### Authors
 
 - Patrick Flick
 
-## Code organization
+### Code organization
 
 The implementation is split into multiple headers:
 

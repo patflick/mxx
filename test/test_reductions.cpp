@@ -83,7 +83,6 @@ struct mymax {
 };
 
 int mymin(int x, int y) {
-    std::cout << "mymin called" << std::endl;
     if (x < y) 
         return x;
     else
