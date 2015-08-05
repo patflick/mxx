@@ -50,16 +50,19 @@ The following example showcases the C++11 interface to reductions and
 the general usage of `mxx`:
 
 ```c++
+    #include <mxx/reduction.hpp>
+
+    // ...
     // lets take some pairs and find the one with the max second element
     std::pair<int, double> v = ...;
     mxx::allreduce(v, [](const std::pair<int, double>& x, const std::pair<int, double>& y){
                            return x.second > y.second ? x : y;
                         });
 ```
-What happens here is that the types are automatically matched to the
+What happens here, is that the C++ types are automatically matched to the
 appropriate `MPI_Datatype` (struct of `MPI_INT` and `MPI_DOUBLE`),
-then a custom reduction operator is created from
-the given lambda, and then `MPI_Allreduce` called underneath.
+then a custom reduction operator (`MPI_Op`) is created from
+the given lambda, and finally `MPI_Allreduce` called for the given parameters.
 
 #### Sorting
 
