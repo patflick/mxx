@@ -126,10 +126,9 @@ To our knowledge, there are two noteworthy, similar open libraries available.
 1. [**boost::mpi**](https://github.com/boostorg/mpi) offers C++ bindings for a
    large number of MPI functions. As such it corresponds to our main goal *1*.
    Major drawbacks of using *boost::mpi* are the unnecessary overhead of
-   *boost::serialization* (especially in terms of memory overhead) and that it
-   ceased to be a header only library. Most cluster don't have an installation
-   of  *boost* or the available version is ancient. Boost installations and
-   dependencies have become a huge mess.
+   *boost::serialization* (especially in terms of memory overhead).
+   *boost::mpi* also doesn't support large message sizes (> `INT_MAX`), and
+   the custom reduction operator implementation is rather limited.
 2. [**mpp**](https://github.com/motonacciu/mpp) offers low-overhead C++ bindings
    for MPI point-to-point communication primitives. As such, this solutions
    shows better performance than *boost::mpi*, but was never continued beyond
