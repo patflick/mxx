@@ -21,7 +21,7 @@
 
 // mxx includes
 #include "datatypes.hpp"
-#include "comm.hpp"
+#include "comm_fwd.hpp"
 
 namespace mxx {
 
@@ -912,5 +912,8 @@ inline bool none_of(bool x, const mxx::comm& comm = mxx::comm()) {
 }
 
 } // namespace mxx
+
+#define MXX_REDUCTION_DONE
+#include "comm_def.hpp"
 
 #endif // MXX_REDUCTION_HPP

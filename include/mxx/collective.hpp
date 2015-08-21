@@ -21,8 +21,8 @@
 
 // mxx includes
 #include "datatypes.hpp"
+#include "comm_fwd.hpp"
 #include "shift.hpp"
-#include "comm.hpp"
 
 /// main namespace for mxx
 namespace mxx {
@@ -1650,5 +1650,9 @@ std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& s
 
 
 } // namespace mxx
+
+// include comm definitions
+#define MXX_COLLECTIVE_DONE
+#include "comm_def.hpp"
 
 #endif // MXX_COLLECTIVE_HPP
