@@ -134,3 +134,5 @@ TEST(MxxReduce, ReduceOne) {
 
 
 // TODO: test for BIG MPI calls
+// TODO: test for vector reduce
+// TODO: test for simple all_of/some_of etc reductions

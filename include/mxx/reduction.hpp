@@ -344,6 +344,7 @@ T exscan(const T& x, const mxx::comm& comm = mxx::comm()) {
  *  reverse reductions (with reverse communicator)  *
  ****************************************************/
 
+// TODO: implement reversing communicator inside communicator class
 inline void rev_comm(MPI_Comm comm, MPI_Comm& rev)
 {
     // get MPI parameters
@@ -355,7 +356,7 @@ inline void rev_comm(MPI_Comm comm, MPI_Comm& rev)
 }
 
 template <typename T>
-T reverse_exscan(T& x, const mxx::comm& comm = mxx::comm()) {
+T reverse_exscan(const T& x, const mxx::comm& comm = mxx::comm()) {
     MPI_Comm rev;
     rev_comm(comm, rev);
     T result = exscan(x, rev);
@@ -364,7 +365,7 @@ T reverse_exscan(T& x, const mxx::comm& comm = mxx::comm()) {
 }
 
 template <typename T, typename Func>
-T reverse_exscan(T& x, Func func, const mxx::comm& comm = mxx::comm()) {
+T reverse_exscan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     MPI_Comm rev;
     rev_comm(comm, rev);
     T result = exscan(x, func, rev);
@@ -373,7 +374,7 @@ T reverse_exscan(T& x, Func func, const mxx::comm& comm = mxx::comm()) {
 }
 
 template <typename T>
-T reverse_scan(T& x, const mxx::comm& comm = mxx::comm()) {
+T reverse_scan(const T& x, const mxx::comm& comm = mxx::comm()) {
     MPI_Comm rev;
     rev_comm(comm, rev);
     T result = scan(x, rev);
@@ -382,7 +383,7 @@ T reverse_scan(T& x, const mxx::comm& comm = mxx::comm()) {
 }
 
 template <typename T, typename Func>
-T reverse_scan(T& x, Func func, const mxx::comm& comm = mxx::comm()) {
+T reverse_scan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     MPI_Comm rev;
     rev_comm(comm, rev);
     T result = scan(x, func, rev);

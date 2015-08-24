@@ -12,6 +12,7 @@
 #define MXX_COMM_HPP
 
 #include <mpi.h>
+#include <utility> // std::move
 
 namespace mxx {
 
@@ -34,12 +35,16 @@ public:
     }
 
     /// Copy constructor
+    /*
     comm(const comm& o) : m_size(o.m_size), m_rank(o.m_rank) {
         if (!is_builtin(o.mpi_comm))
             MPI_Comm_dup(o.mpi_comm, &mpi_comm);
         else
             mpi_comm = o.mpi_comm;
     }
+    */
+    // disable copying communicator
+    comm(const comm& o) = delete;
 
     /// Move constructor
     comm(comm&& o) : mpi_comm(o.mpi_comm), m_size(o.m_size), m_rank(o.m_rank) {
@@ -48,6 +53,7 @@ public:
     }
 
     /// Copy assignment
+    /*
     comm& operator=(const comm& o) {
         free();
         if (is_builtin(o.mpi_comm))
@@ -57,6 +63,17 @@ public:
         m_size = o.m_size;
         m_rank = o.m_rank;
         return *this;
+    }
+    */
+    // disable implicit copying
+    comm& operator=(const comm& o) = delete;
+
+    comm&& copy() {
+        comm o;
+        MPI_Comm_dup(this->mpi_comm, &o.mpi_comm);
+        o.m_size = m_size;
+        o.m_rank = m_rank;
+        return std::move(o);
     }
 
     /// Move assignment

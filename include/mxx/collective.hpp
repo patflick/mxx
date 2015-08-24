@@ -6,7 +6,7 @@
  *
  * @detail
  *
- * Copyright (c) 2014 Georgia Institute of Technology. All Rights Reserved.
+ * Copyright (c) 2015 Georgia Institute of Technology. All Rights Reserved.
  *
  * TODO add Licence
  */
@@ -21,8 +21,9 @@
 
 // mxx includes
 #include "datatypes.hpp"
-#include "shift.hpp"
+#include "shift.hpp" // FIXME import only `requests`
 #include "comm.hpp"
+#include "big_collective.hpp"
 
 /// main namespace for mxx
 namespace mxx {
@@ -42,60 +43,6 @@ static_assert(sizeof(size_t) == sizeof(MPI_Aint), "MPI_Aint must be the same siz
  *                             Scatter                              *
  *********************************************************************/
 
-/// Implementation details
-namespace impl {
-
-/**
- * @brief   Returns the displacements vector needed by MPI_Alltoallv.
- *
- * @param counts    The `counts` array needed by MPI_Alltoallv
- *
- * @return The displacements vector needed by MPI_Alltoallv.
- */
-template <typename index_t = int>
-std::vector<index_t> get_displacements(const std::vector<index_t>& counts)
-{
-    // copy and do an exclusive prefix sum
-    std::vector<index_t> result(counts);
-    // set the total sum to zero
-    index_t sum = 0;
-    index_t tmp;
-
-    // calculate the exclusive prefix sum
-    typename std::vector<index_t>::iterator begin = result.begin();
-    while (begin != result.end())
-    {
-        tmp = sum;
-        // assert that the sum will still fit into the index type (MPI default:
-        // int)
-        assert((std::size_t)sum + (std::size_t)*begin < (std::size_t) std::numeric_limits<index_t>::max());
-        sum += *begin;
-        *begin = tmp;
-        ++begin;
-    }
-    return result;
-}
-
-
-
-
-/**
- * @brief 
- *
- * @tparam T
- * @param msgs
- * @param size
- * @param out
- * @param root
- * @param comm
- */
-template <typename T>
-void scatter_big(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm = mxx::comm())
-{
-    mxx::datatype_contiguous<T> dt(size);
-    MPI_Scatter(const_cast<T*>(msgs), 1, dt.type(), out, 1, dt.type(), root, comm);
-}
-} // namespace impl
 
 /**
  * @fn void scatter(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm)
@@ -173,7 +120,7 @@ template <typename T>
 std::vector<T> scatter(const T* msgs, size_t size, int root, const mxx::comm& comm = mxx::comm()) {
     std::vector<T> result(size);
     scatter(msgs, size, &result[0], root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -197,7 +144,7 @@ template <typename T>
 std::vector<T> scatter(const std::vector<T>& msgs, size_t size, int root, const mxx::comm& comm = mxx::comm()) {
     assert(comm.rank() != root || msgs.size() == size*comm.size());
     std::vector<T> result = scatter(&msgs[0], size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -219,7 +166,7 @@ template <typename T>
 std::vector<T> scatter_recv(size_t size, int root, const mxx::comm& comm = mxx::comm()) {
     std::vector<T> result(size);
     scatter((const T*)nullptr, size, &result[0], root, comm);
-    return std::move(result);
+    return result;
 }
 
 /************************
@@ -249,7 +196,7 @@ std::vector<T> scatter(const std::vector<T>& msgs, int root, const mxx::comm& co
     MPI_Bcast(&size, 1, sizedt.type(), root, comm);
     // now everybody knows the size
     std::vector<T> result = scatter(msgs, size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -276,7 +223,7 @@ std::vector<T> scatter_recv(int root, const mxx::comm& comm = mxx::comm()) {
     MPI_Bcast(&size, 1, sizedt.type(), root, comm);
     // now everybody knows the size
     std::vector<T> result = scatter_recv<T>(size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 
@@ -332,49 +279,6 @@ T scatter_one_recv(int root, const mxx::comm& comm = mxx::comm()) {
 /*********************************************************************
  *                             Scatter-V                             *
  *********************************************************************/
-
-namespace impl {
-
-/**
- * @brief Implementation of `scatterv()` for messages with elements more than MAX_INT.
- *
- * @tparam T        The type of the data.
- * @param msgs      The data to be scattered. Must be of size \f$ \sum_{i=0}^{p-1} \texttt{sizes[i]}\f$ (number of elements of type `T`).
- * @param sizes     The size (number of elements) per message per target process.
- *                  This must be a `std::vector` of size `comm.size()`.
- * @param out       Pointer to the output data. This has to point to valid
- *                  memory, which can hold at least `size` many elements of
- *                  type `T`.
- * @param recv_size The number of elements received on this process.
- * @param root      The rank of the process which scatters the data to all
- *                  other processes.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
- */
-template <typename T>
-void scatterv_big(const T* msgs, const std::vector<size_t>& sizes, T* out, size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
-    // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::requests reqs;
-    int tag = 1234; // TODO: handle tags somewhere (as attributes in the comm?)
-    if (comm.rank() == root) {
-        std::size_t offset = 0;
-        for (int i = 0; i < comm.size(); ++i) {
-            mxx::datatype_contiguous<T> dt(sizes[i]);
-            if (i == root) {
-                // copy input into output
-                std::copy(msgs+offset, msgs+offset+sizes[i], out);
-            } else {
-                MPI_Isend(const_cast<T*>(msgs)+offset, 1, dt.type(), i, tag, comm, &reqs.add());
-            }
-            offset += sizes[i];
-        }
-    } else {
-        // create custom datatype to encapsulate the whole message
-        mxx::datatype_contiguous<T> dt(recv_size);
-        MPI_Irecv(const_cast<T*>(out), 1, dt.type(), root, tag, comm, &reqs.add());
-    }
-    reqs.wait();
-}
-} // namespace impl
 
 /**
  * @brief   Scatters data from the process `root` to all processes in the communicator.
@@ -462,7 +366,7 @@ std::vector<T> scatterv(const T* msgs, const std::vector<size_t>& sizes, size_t 
     assert(root != comm.rank() || sizes.size() == comm.size());
     std::vector<T> result(recv_size);
     scatterv(msgs, sizes, &result[0], recv_size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -492,7 +396,7 @@ std::vector<T> scatterv(const std::vector<T>& msgs, const std::vector<size_t>& s
     assert(root != comm.rank() || sizes.size() == comm.size());
     std::vector<T> result(recv_size);
     scatterv(&msgs[0], sizes, &result[0], recv_size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -521,7 +425,7 @@ std::vector<T> scatterv(const T* msgs, const std::vector<size_t>& sizes, int roo
     assert(root != comm.rank() || sizes.size() == comm.size());
     size_t recv_size = scatter_one<size_t>(sizes, root, comm);
     std::vector<T> result = scatterv(msgs, sizes, recv_size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -553,7 +457,7 @@ std::vector<T> scatterv(const std::vector<T>& msgs, const std::vector<size_t>& s
     assert(root != comm.rank() || sizes.size() == comm.size());
     size_t recv_size = scatter_one<size_t>(sizes, root, comm);
     std::vector<T> result = scatterv(&msgs[0], sizes, recv_size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -597,7 +501,7 @@ void scatterv_recv(T* out, size_t recv_size, int root, const mxx::comm& comm = m
 template <typename T>
 std::vector<T> scatterv_recv(size_t recv_size, int root, const mxx::comm& comm = mxx::comm()) {
     std::vector<T> result = scatterv((const T*)nullptr, std::vector<size_t>(), recv_size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -626,39 +530,13 @@ template <typename T>
 std::vector<T> scatterv_recv(int root, const mxx::comm& comm = mxx::comm()) {
     size_t recv_size = scatter_one_recv<size_t>(root, comm);
     std::vector<T> result = scatterv_recv<T>(recv_size, root, comm);
-    return std::move(result);
+    return result;
 }
 
 
 /*********************************************************************
  *                              Gather                               *
  *********************************************************************/
-
-namespace impl {
-/**
- * @brief   Implementation of `gather()` for large message sizes (> MAX_INT).
- *
- * @see mxx::gather
- *
- * @tparam T        The type of the data.
- * @param data      The data to be gathered. Must be of size `size`.
- * @param size      The size per message. This is the number of elements which
- *                  are sent by each process. Thus `p*size` is gathered in total.
- *                  This must be the same value on all processes.
- * @param out       Pointer to the output data. On the `root` process, this has
- *                  to point to valid memory, which can hold at least `p*size`
- *                  many elements of type `T`.
- * @param root      The rank of the process which gahters the data from all
- *                  other processes to itself.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
- */
-template <typename T>
-void gather_big(const T* data, size_t size, T* out, int root, const mxx::comm& comm) {
-    // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::datatype_contiguous<T> dt(size);
-    MPI_Gather(const_cast<T*>(data), 1, dt.type(), out, 1, dt.type(), root, comm);
-}
-} // namespace impl
 
 /**
  * @brief   Gathers data from all processes onto the root process.
@@ -726,7 +604,7 @@ std::vector<T> gather(const T* data, size_t size, int root, const mxx::comm& com
     if (comm.rank() == root)
         result.resize(size*comm.size());
     gather(data, size, &result[0], root, comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -780,54 +658,6 @@ std::vector<T> gather(const T& x, int root, const mxx::comm& comm = mxx::comm())
 /*********************************************************************
  *                             Gather-V                              *
  *********************************************************************/
-
-namespace impl {
-
-/**
- * @brief   Implementation for message sizes larger than MAX_INT elements.
- *
- * @see mxx::gatherv()
- *
- * @tparam T        The type of the data.
- * @param data      The data to be gathered. Must be of size `size`.
- * @param size      The number of elements send from this process.
- * @param out       Pointer to the output data. On the `root` process, this has
- *                  to point to valid memory, which can hold at least
- *                  \f$ \sum_{i=0}^{p-1} \texttt{recv\_sizes[i]} \f$
- *                  many elements of type `T`.
- * @param recv_sizes    The number of elements received per process. This has
- *                      to be of size `p` on process `root`. On other processes
- *                      this can be an empty `std::vector`.
- * @param root      The rank of the process which gahters the data from all
- *                  other processes to itself.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
- */
-template <typename T>
-void gatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
-    // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::requests reqs;
-    int tag = 1234; // TODO: handle tags somewhere (as attributes in the comm?)
-    if (comm.rank() == root) {
-        size_t offset = 0;
-        for (int i = 0; i < comm.size(); ++i) {
-            mxx::datatype_contiguous<T> dt(recv_sizes[i]);
-            if (i == root) {
-                // copy input into output
-                std::copy(data, data+size, out+offset);
-            } else {
-                MPI_Irecv(const_cast<T*>(out)+offset, 1, dt.type(), i, tag, comm, &reqs.add());
-            }
-            offset += recv_sizes[i];
-        }
-    } else {
-        // create custom datatype to encapsulate the whole message
-        mxx::datatype_contiguous<T> dt(size);
-        MPI_Isend(const_cast<T*>(data), 1, dt.type(), root, tag, comm, &reqs.add());
-    }
-    reqs.wait();
-}
-} // namespace impl
-
 
 /**
  * @brief   Gathers data from all processes onto the root process.
@@ -1023,30 +853,6 @@ std::vector<T> gatherv(const std::vector<T>& data, int root, const mxx::comm& co
  *                           AllGather                               *
  *********************************************************************/
 
-namespace impl {
-/**
- * @brief   Implementation of `allgather()` for large message sizes (> MAX_INT).
- *
- * @see mxx::allgather
- *
- * @tparam T        The type of the data.
- * @param data      The data to be gathered. Must be of size `size`.
- * @param size      The size per message. This is the number of elements which
- *                  are sent by each process. Thus `p*size` is gathered in total.
- *                  This must be the same value on all processes.
- * @param out       Pointer to the output data. On the `root` process, this has
- *                  to point to valid memory, which can hold at least `p*size`
- *                  many elements of type `T`.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
- */
-template <typename T>
-void allgather_big(const T* data, size_t size, T* out, const mxx::comm& comm) {
-    // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::datatype_contiguous<T> dt(size);
-    MPI_Allgather(const_cast<T*>(data), 1, dt.type(), out, 1, dt.type(), comm);
-}
-} // namespace impl
-
 /**
  * @brief   Gathers data from all processes onto each process.
  *
@@ -1105,7 +911,7 @@ std::vector<T> allgather(const T* data, size_t size, const mxx::comm& comm = mxx
     std::vector<T> result;
     result.resize(size*comm.size());
     allgather(data, size, &result[0], comm);
-    return std::move(result);
+    return result;
 }
 
 /**
@@ -1150,34 +956,6 @@ std::vector<T> allgather(const T& x, const mxx::comm& comm = mxx::comm()) {
 /*********************************************************************
  *                             Gather-V                              *
  *********************************************************************/
-
-namespace impl {
-
-/**
- * @brief   Implementation for message sizes larger than MAX_INT elements.
- *
- * @see mxx::allgatherv()
- *
- */
-template <typename T>
-void allgatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
-    // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::requests reqs;
-    int tag = 1234; // TODO: handle tags somewhere (as attributes in the comm?)
-    size_t offset = 0;
-    for (int i = 0; i < comm.size(); ++i) {
-        // send to this rank
-        mxx::datatype_contiguous<T> senddt(size);
-        MPI_Isend(const_cast<T*>(data), 1, senddt.type(), i, tag, comm, &reqs.add());
-        // receive from this rank
-        mxx::datatype_contiguous<T> dt(recv_sizes[i]);
-        MPI_Irecv(const_cast<T*>(out)+offset, 1, dt.type(), i, tag, comm, &reqs.add());
-        offset += recv_sizes[i];
-    }
-    reqs.wait();
-}
-} // namespace impl
-
 
 /**
  * @brief   Gathers data from all processes onto each process.
@@ -1347,26 +1125,6 @@ std::vector<T> allgatherv(const std::vector<T>& data, const mxx::comm& comm = mx
  *                            All-to-all                             *
  *********************************************************************/
 
-namespace impl {
-
-/**
- * @brief   `all2all()` implementation for message sizes larger than MAX_INT.
- *
- * @tparam T        The data type of the elements.
- * @param msgs      Pointer to memory containing the elements to be send.
- * @param size      The number of elements to send to each process. The `msgs` pointer
- *                  must contain `p*size` elements.
- * @param out       Pointer to memory for writing the received messages. Must be
- *                  able to hold at least `p*size` many elements of type `T`.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
- */
-template <typename T>
-void all2all_big(const T* msgs, size_t size, T* out, const mxx::comm& comm = mxx::comm()) {
-    datatype_contiguous<T> bigtype(size);
-    MPI_Alltoall(const_cast<T*>(msgs), 1, bigtype.type(), out, 1, bigtype.type(), comm);
-}
-}
-
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.
  *
@@ -1449,54 +1207,6 @@ std::vector<T> all2all(const std::vector<T>& msgs, const mxx::comm& comm = mxx::
 /*********************************************************************
  *                           All-to-all-V                            *
  *********************************************************************/
-
-namespace impl {
-/**
- * @brief   Implementation for `mxx::all2allv()` for messages sizes larger than MAX_INT
- *
- * @see mxx::all2allv()
- *
- * @tparam T        The data type of the elements.
- * @param msgs      Pointer to memory containing the elements to be send.
- * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
- *                      the number of elements to be send to each of the processes.
- * @param out       Pointer to memory for writing the received messages.
- * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
- *                      the number of elements to be received from each process.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
- */
-template <typename T>
-void all2allv_big(const T* msgs, const std::vector<size_t>& send_sizes, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
-    // point-to-point implementation
-    // TODO: implement MPI_Alltoallw variant
-    // TODO: try RMA
-    assert(send_sizes.size() == comm.size());
-    assert(recv_sizes.size() == comm.size());
-    std::vector<size_t> send_displs = impl::get_displacements(send_sizes);
-    std::vector<size_t> recv_displs = impl::get_displacements(recv_sizes);
-    // TODO: unify tag usage
-    int tag = 12345;
-    // implementing this using point-to-point communication!
-    // dispatch receives
-    mxx::requests reqs;
-    for (int i = 0; i < comm.size(); ++i) {
-        // start with self send/recv
-        int recv_from = (comm.rank() + (comm.size()-i)) % comm.size();
-        datatype_contiguous<T> bigtype(recv_sizes[recv_from]);
-        MPI_Irecv(const_cast<T*>(&(*out)) + recv_displs[recv_from], 1, bigtype.type(),
-                  recv_from, tag, comm, &reqs.add());
-    }
-    // dispatch sends
-    for (int i = 0; i < comm.size(); ++i) {
-        int send_to = (comm.rank() + i) % comm.size();
-        datatype_contiguous<T> bigtype(send_sizes[send_to]);
-        MPI_Isend(const_cast<T*>(msgs)+send_displs[send_to], 1, bigtype.type(), send_to,
-                  tag, comm, &reqs.add());
-    }
-
-    reqs.wait();
-}
-}
 
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.

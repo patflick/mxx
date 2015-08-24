@@ -647,7 +647,7 @@ TEST(MxxColl, All2allvUnknownSize) {
     std::vector<char>::iterator it = result.begin();
     for (int i = 0; i < c.size(); ++i) {
         for (size_t j = 0; j < actual_recv_count[i]; ++j) {
-            ASSERT_EQ('A'+i+c.rank()+j, *it);
+            ASSERT_EQ((char)('A'+i+c.rank()+j), *it);
             it++;
         }
     }
