@@ -133,6 +133,34 @@ TEST(MxxReduce, ReduceOne) {
 }
 
 
+TEST(MxxReduce, AllReduceVec) {
+    mxx::comm c;
+
+    int n = 10; // numbers per rank
+
+    std::vector<int> v(n);
+    for (int i = 0; i < n; ++i) {
+        v[i] = i;
+    }
+
+    std::vector<int> w = mxx::allreduce(v);
+    ASSERT_EQ(n, w.size());
+    for (int i = 0; i < n; ++i) {
+        ASSERT_EQ(c.size()*i, w[i]);
+    }
+
+    w = mxx::allreduce(v, [](int x, int y) { return x+y; }, c.split(c.rank() % 2));
+    int mysize = c.size() / 2;
+    if (c.size() % 2 == 1 && c.rank() % 2 == 0)
+        ++mysize;
+    ASSERT_EQ(mysize, c.split(c.rank() % 2).size());
+    ASSERT_EQ(n, w.size());
+    for (int i = 0; i < n; ++i) {
+        ASSERT_EQ(mysize*i, w[i]);
+    }
+}
+
+
 // TODO: test for BIG MPI calls
 // TODO: test for vector reduce
 // TODO: test for simple all_of/some_of etc reductions

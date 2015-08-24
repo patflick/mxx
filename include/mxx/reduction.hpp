@@ -17,10 +17,11 @@
 #include <functional>
 #include <mutex>
 #include <atomic>
+#include <assert.h> // TODO: replace with own assert (calling MPI_Abort)
 
 // mxx includes
 #include "datatypes.hpp"
-#include "comm.hpp"
+#include "comm_fwd.hpp"
 
 namespace mxx {
 
@@ -256,30 +257,48 @@ private:
 /*********************************************************************
  *                Reductions                                         *
  *********************************************************************/
-// TODO: add more (vectorized (std::vector, [begin,end),...), different reduce ops, etc)
-// TODO: naming of functions !?
-// TODO: come up with good naming scheme and standardize!
 
-// TODO: ptr+size vs [begin,end)
-/*
+
+/*********************************************************************
+ *                              Reduce                               *
+ *********************************************************************/
+
 template <typename T, typename Func>
-void reduce(const T* in, size_t n, const T* out, int root, Func func, const mxx::comm& comm = mxx::comm()) {
-
-}
-template <typename T, typename Func>
-std::vector<T> reduce(const T* in, size_t n, int root, Func func, const mxx::comm& comm = mxx::comm()) {
-
+inline void reduce(const T* in, size_t n, T* out, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+    // get custom op
+    mxx::custom_op<T> op(std::forward<Func>(func));
+    MPI_Reduce(const_cast<T*>(in), out, n, op.get_type(), op.get_op(), root, comm);
 }
 
-template <typename T, typename Func>
-std::vector<T> reduce(const std::vector<T>& in, int root, Func func, const mxx::comm& comm = mxx::comm()) {
-
+template <typename T>
+inline void reduce(const T* in, size_t n, T* out, int root, const mxx::comm& comm = mxx::comm()) {
+    reduce(in, n, out, root, std::plus<T>(), comm);
 }
-*/
-
 
 template <typename T, typename Func>
-T reduce(const T& x, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+inline std::vector<T> reduce(const T* in, size_t n, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(n);
+    reduce(in, n, &result[0], root, func, comm);
+    return result;
+}
+
+template <typename T>
+inline std::vector<T> reduce(const T* in, size_t n, int root, const mxx::comm& comm = mxx::comm()) {
+    return reduce(in, n, root, std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline std::vector<T> reduce(const std::vector<T>& in, int root, Func func, const mxx::comm& comm = mxx::comm()) {
+    return reduce(&in[0], in.size(), root, func, comm);
+}
+
+template <typename T>
+inline std::vector<T> reduce(const std::vector<T>& in, int root, const mxx::comm& comm = mxx::comm()) {
+    return reduce(in, root, std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline T reduce(const T& x, int root, Func func, const mxx::comm& comm = mxx::comm()) {
     // get custom op (and type for custom op)
     mxx::custom_op<T> op(std::forward<Func>(func));
     T result = T();
@@ -288,14 +307,51 @@ T reduce(const T& x, int root, Func func, const mxx::comm& comm = mxx::comm()) {
 }
 
 template <typename T>
-T reduce(const T& x, int root, const mxx::comm& comm = mxx::comm()) {
+inline T reduce(const T& x, int root, const mxx::comm& comm = mxx::comm()) {
     return reduce(x, root, std::plus<T>(), comm);
 }
 
-// TODO: vectorized ops
+
+/*********************************************************************
+ *                             Allreduce                             *
+ *********************************************************************/
 
 template <typename T, typename Func>
-T allreduce(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
+inline void allreduce(const T* in, size_t n, T* out, Func func, const mxx::comm& comm = mxx::comm()) {
+    // get custom op
+    mxx::custom_op<T> op(std::forward<Func>(func));
+    MPI_Allreduce(const_cast<T*>(in), out, n, op.get_type(), op.get_op(), comm);
+}
+
+template <typename T>
+inline void allreduce(const T* in, size_t n, T* out, const mxx::comm& comm = mxx::comm()) {
+    allreduce(in, n, out, std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline std::vector<T> allreduce(const T* in, size_t n, Func func, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(n);
+    allreduce(in, n, &result[0], func, comm);
+    return result;
+}
+
+template <typename T>
+inline std::vector<T> allreduce(const T* in, size_t n, const mxx::comm& comm = mxx::comm()) {
+    return allreduce(in, n, std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline std::vector<T> allreduce(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+    return allreduce(&in[0], in.size(), func, comm);
+}
+
+template <typename T>
+inline std::vector<T> allreduce(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    return allreduce(in, std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline T allreduce(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     // get custom op (and type for custom op)
     mxx::custom_op<T> op(std::forward<Func>(func));
     // perform reduction
@@ -305,23 +361,294 @@ T allreduce(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
 }
 
 template <typename T>
-T allreduce(const T& x, const mxx::comm& comm = mxx::comm()) {
+inline T allreduce(const T& x, const mxx::comm& comm = mxx::comm()) {
     return allreduce(x, std::plus<T>(), comm);
 }
 
+
+/*********************************************************************
+ *                    Local and Global reductions                    *
+ *********************************************************************/
+
+// local reduce
+
+template <typename Iterator, typename Func>
+inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterator begin, Iterator end, Func func) {
+    assert(std::distance(begin, end) >= 1);
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+    T init = std::accumulate(begin+1, end, *begin, func);
+    return init;
+}
+
+template <typename Iterator>
+inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterator begin, Iterator end) {
+    return local_reduce(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>());
+}
+
+// overloads for std::vector
+
 template <typename T, typename Func>
-T scan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
+inline T local_reduce(const std::vector<T>& in, Func func) {
+    assert(in.size() >= 1);
+    T init = std::accumulate(in.begin()+1, in.end(), in.front(), func);
+    return init;
+}
+template <typename T>
+inline T local_reduce(const std::vector<T>& in) {
+    return local_reduce(in, std::plus<T>());
+}
+
+// global reduce (= local_reduce + allreduce)
+
+template <typename Iterator, typename Func>
+inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterator begin, Iterator end, Func func, const mxx::comm& comm = mxx::comm()) {
+    assert(std::distance(begin, end) >= 1);
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+    T init = std::accumulate(begin+1, end, *begin, func);
+    return allreduce(init, func, comm);
+}
+
+template <typename Iterator>
+inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterator begin, Iterator end, const mxx::comm& comm = mxx::comm()) {
+    return global_reduce(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>(), comm);
+}
+
+// overloads for std::vector
+
+template <typename T, typename Func>
+inline T global_reduce(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+    assert(in.size() >= 1);
+    T init = std::accumulate(in.begin()+1, in.end(), in.front(), func);
+    return allreduce(init, func, comm);
+}
+
+template <typename T>
+inline T global_reduce(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    return global_reduce(in, std::plus<T>(), comm);
+}
+
+
+/*********************************************************************
+ *                               Scan                                *
+ *********************************************************************/
+
+// reduce over vectors
+
+template <typename T, typename Func>
+inline void scan_vec(const T* in, size_t n, T* out, Func func, const mxx::comm& comm = mxx::comm()) {
+    // get op
+    mxx::custom_op<T> op(std::forward<Func>(func));
+    MPI_Scan(const_cast<T*>(in), out, n, op.get_type(), op.get_op(), comm);
+}
+template <typename T, typename Func>
+inline std::vector<T> scan_vec(const T* in, size_t n, Func func, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(n);
+    scan_vec(in, n, &result[0], func, comm);
+    return result;
+}
+template <typename T, typename Func>
+inline std::vector<T> scan_vec(const std::vector<T>& x, Func func, const mxx::comm& comm = mxx::comm()) {
+    return scan_vec(&x[0], x.size(), func, comm);
+}
+
+// single element per processor
+
+template <typename T, typename Func>
+inline T scan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     // get op
     mxx::custom_op<T> op(std::forward<Func>(func));
     T result;
     MPI_Scan(const_cast<T*>(&x), &result, 1, op.get_type(), op.get_op(), comm);
     return result;
 }
+
 template <typename T>
-T scan(const T& x, const mxx::comm& comm = mxx::comm()) {
+inline T scan(const T& x, const mxx::comm& comm = mxx::comm()) {
     return scan(x, std::plus<T>(), comm);
 }
 
+// local scan
+
+template <typename InIterator, typename OutIterator, typename Func>
+void local_scan(InIterator begin, InIterator end, OutIterator out, Func func) {
+    // return if there's nothing here
+    if (std::distance(begin, end) == 0)
+        return;
+    typedef typename std::iterator_traits<OutIterator>::value_type T;
+
+    // start from first element
+    T val = *begin;
+    *out = *begin;
+    ++begin;
+    ++out;
+
+    // calculate the inclusive prefix sum
+    while (begin != end) {
+        val = func(val,*begin);
+        *out = val;
+        ++begin;
+        ++out;
+    }
+}
+
+
+// inplace!
+template <typename Iterator, typename Func>
+void local_scan_inplace(Iterator begin, Iterator end, Func func) {
+    // return if there's nothing here
+    if (std::distance(begin, end) == 0)
+        return;
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+
+    // start from first element
+    T val = *begin;
+    ++begin;
+
+    // calculate the inclusive prefix sum
+    while (begin != end) {
+        val = func(val,*begin);
+        *begin = val;
+        ++begin;
+    }
+}
+
+template <typename InIterator, typename OutIterator>
+inline void local_scan(InIterator begin, InIterator end, OutIterator out) {
+    return local_scan(begin, end, out, std::plus<typename std::iterator_traits<OutIterator>::value_type>());
+}
+
+template <typename Iterator>
+inline void local_scan_inplace(Iterator begin, Iterator end) {
+    return local_scan_inplace(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>());
+}
+
+// std::vector overloads
+template <typename T, typename Func>
+inline void local_scan_inplace(const std::vector<T>& in, Func func) {
+    local_scan_inplace(in.begin(), in.end(), func);
+}
+
+template <typename T>
+inline void local_scan_inplace(const std::vector<T>& in) {
+    local_scan_inplace(in.begin(), in.end(), std::plus<T>());
+}
+
+template <typename T, typename Func>
+inline std::vector<T> local_scan(const std::vector<T>& in, Func func) {
+    std::vector<T> result(in.size());
+    local_scan(in.begin(), in.end(), result.begin(), func);
+    return result;
+}
+
+template <typename T>
+inline void local_scan(const std::vector<T>& in) {
+    std::vector<T> result(in.size());
+    local_scan(in.begin(), in.end(), result.begin(), std::plus<T>());
+    return result;
+}
+
+// global scans
+
+template <typename InIterator, typename OutIterator, typename Func>
+void global_scan(InIterator begin, InIterator end, OutIterator out, Func func, const mxx::comm& comm = mxx::comm()) {
+    OutIterator o = out;
+    size_t n = std::distance(begin, end);
+    // local scan
+    local_scan(begin, end, out, func);
+    // mxx::scan
+    typedef typename std::iterator_traits<OutIterator>::value_type T;
+    T sum = T();
+    if (n > 0)
+        sum = *(out+(n-1));
+    T presum = exscan(sum, func, comm);
+
+    // accumulate previous sum on all local elements
+    for (size_t i = 0; i < n; ++i) {
+        *o = func(presum, *o);
+    }
+}
+
+
+// inplace!
+template <typename Iterator, typename Func>
+inline void global_scan_inplace(Iterator begin, Iterator end, Func func, const mxx::comm& comm = mxx::comm()) {
+    Iterator o = begin;
+    size_t n = std::distance(begin, end);
+    // local inplace scan
+    local_scan_inplace(begin, end, func);
+    // mxx::exscan
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+    T sum = T();
+    if (n > 0)
+        sum = *(end-1);
+    T presum = exscan(sum, func, comm);
+
+    // accumulate previous sum on all local elements
+    for (size_t i = 0; i < n; ++i) {
+        *o = func(presum, *o);
+    }
+}
+
+template <typename InIterator, typename OutIterator>
+inline void global_scan(InIterator begin, InIterator end, OutIterator out, const mxx::comm& comm = mxx::comm()) {
+    return global_scan(begin, end, out, std::plus<typename std::iterator_traits<OutIterator>::value_type>(), comm);
+}
+
+template <typename Iterator>
+inline void global_scan_inplace(Iterator begin, Iterator end, const mxx::comm& comm = mxx::comm()) {
+    return global_scan_inplace(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>(), comm);
+}
+
+// std::vector overloads
+template <typename T, typename Func>
+inline void global_scan_inplace(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+    global_scan_inplace(in.begin(), in.end(), func, comm);
+}
+
+template <typename T>
+inline void global_scan_inplace(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    global_scan_inplace(in.begin(), in.end(), std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline std::vector<T> global_scan(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(in.size());
+    global_scan(in.begin(), in.end(), result.begin(), func, comm);
+    return result;
+}
+
+template <typename T>
+inline void global_scan(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(in.size());
+    global_scan(in.begin(), in.end(), result.begin(), std::plus<T>(), comm);
+    return result;
+}
+
+/*********************************************************************
+ *                              Exscan                               *
+ *********************************************************************/
+
+// reduce over vectors
+
+template <typename T, typename Func>
+inline void exscan_vec(const T* in, size_t n, T* out, Func func, const mxx::comm& comm = mxx::comm()) {
+    // get op
+    mxx::custom_op<T> op(std::forward<Func>(func));
+    MPI_Exscan(const_cast<T*>(in), out, n, op.get_type(), op.get_op(), comm);
+}
+template <typename T, typename Func>
+inline std::vector<T> exscan_vec(const T* in, size_t n, Func func, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(n, T());
+    exscan_vec(in, n, &result[0], func, comm);
+    return result;
+}
+template <typename T, typename Func>
+inline std::vector<T> exscan_vec(const std::vector<T>& x, Func func, const mxx::comm& comm = mxx::comm()) {
+    return exscan_vec(&x[0], x.size(), func, comm);
+}
+
+
+// single element
 
 template <typename T, typename Func>
 T exscan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
@@ -340,11 +667,172 @@ T exscan(const T& x, const mxx::comm& comm = mxx::comm()) {
     return exscan(x, std::plus<T>(), comm);
 }
 
+
+// local exscan
+
+template <typename InIterator, typename OutIterator, typename Func>
+void local_exscan(InIterator begin, InIterator end, OutIterator out, Func func) {
+    // return if there's nothing here
+    if (std::distance(begin, end) == 0)
+        return;
+    typedef typename std::iterator_traits<OutIterator>::value_type T;
+
+    // start from first element
+    T val = *begin;
+    *out = T();
+    ++begin;
+    ++out;
+
+    // calculate the exclusive prefix sum
+    while (begin != end) {
+        *out = val;
+        val = func(val,*begin);
+        ++begin;
+        ++out;
+    }
+}
+
+
+// inplace!
+template <typename Iterator, typename Func>
+void local_exscan_inplace(Iterator begin, Iterator end, Func func) {
+    // return if there's nothing here
+    if (std::distance(begin, end) == 0)
+        return;
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+
+    // start from first element
+    T val = *begin;
+    *begin = T();
+    ++begin;
+
+    // calculate the exclusive prefix sum
+    while (begin != end) {
+        *begin = val;
+        val = func(val,*begin);
+        ++begin;
+    }
+}
+
+template <typename InIterator, typename OutIterator>
+inline void local_exscan(InIterator begin, InIterator end, OutIterator out) {
+    return local_exscan(begin, end, out, std::plus<typename std::iterator_traits<OutIterator>::value_type>());
+}
+
+template <typename Iterator>
+inline void local_exscan_inplace(Iterator begin, Iterator end) {
+    return local_exscan_inplace(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>());
+}
+
+// std::vector overloads
+template <typename T, typename Func>
+inline void local_exscan_inplace(const std::vector<T>& in, Func func) {
+    local_exscan_inplace(in.begin(), in.end(), func);
+}
+
+template <typename T>
+inline void local_exscan_inplace(const std::vector<T>& in) {
+    local_exscan_inplace(in.begin(), in.end(), std::plus<T>());
+}
+
+template <typename T, typename Func>
+inline std::vector<T> local_exscan(const std::vector<T>& in, Func func) {
+    std::vector<T> result(in.size());
+    local_exscan(in.begin(), in.end(), result.begin(), func);
+    return result;
+}
+
+template <typename T>
+inline void local_exscan(const std::vector<T>& in) {
+    std::vector<T> result(in.size());
+    local_exscan(in.begin(), in.end(), result.begin(), std::plus<T>());
+    return result;
+}
+
+// global scans
+
+template <typename InIterator, typename OutIterator, typename Func>
+void global_exscan(InIterator begin, InIterator end, OutIterator out, Func func, const mxx::comm& comm = mxx::comm()) {
+    OutIterator o = out;
+    size_t n = std::distance(begin, end);
+    // local scan
+    local_exscan(begin, end, out, func);
+    // mxx::scan
+    typedef typename std::iterator_traits<OutIterator>::value_type T;
+    T sum = T();
+    if (n > 0)
+        sum = *(end-1) + *(o + (n-1));
+    T presum = exscan(sum, func, comm);
+
+    // accumulate previous sum on all local elements
+    for (size_t i = 0; i < n; ++i) {
+        *o = func(presum, *o);
+    }
+}
+
+
+// inplace!
+template <typename Iterator, typename Func>
+inline void global_exscan_inplace(Iterator begin, Iterator end, Func func, const mxx::comm& comm = mxx::comm()) {
+    Iterator o = begin;
+    size_t n = std::distance(begin, end);
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+    T sum = T();
+    if (n > 0)
+        sum = *(end-1);
+    // local inplace scan
+    local_exscan_inplace(begin, end, func);
+    // mxx::exscan
+    if (n > 0)
+        sum += *(end-1);
+    T presum = exscan(sum, func, comm);
+
+    // accumulate previous sum on all local elements
+    for (size_t i = 0; i < n; ++i) {
+        *o = func(presum, *o);
+    }
+}
+
+template <typename InIterator, typename OutIterator>
+inline void global_exscan(InIterator begin, InIterator end, OutIterator out, const mxx::comm& comm = mxx::comm()) {
+    return global_exscan(begin, end, out, std::plus<typename std::iterator_traits<OutIterator>::value_type>(), comm);
+}
+
+template <typename Iterator>
+inline void global_exscan_inplace(Iterator begin, Iterator end, const mxx::comm& comm = mxx::comm()) {
+    return global_exscan_inplace(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>(), comm);
+}
+
+// std::vector overloads
+template <typename T, typename Func>
+inline void global_exscan_inplace(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+    global_exscan_inplace(in.begin(), in.end(), func, comm);
+}
+
+template <typename T>
+inline void global_exscan_inplace(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    global_exscan_inplace(in.begin(), in.end(), std::plus<T>(), comm);
+}
+
+template <typename T, typename Func>
+inline std::vector<T> global_exscan(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(in.size());
+    global_exscan(in.begin(), in.end(), result.begin(), func, comm);
+    return result;
+}
+
+template <typename T>
+inline void global_exscan(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result(in.size());
+    global_exscan(in.begin(), in.end(), result.begin(), std::plus<T>(), comm);
+    return result;
+}
+
 /****************************************************
  *  reverse reductions (with reverse communicator)  *
  ****************************************************/
 
-// TODO: implement reversing communicator inside communicator class
+/*
 inline void rev_comm(MPI_Comm comm, MPI_Comm& rev)
 {
     // get MPI parameters
@@ -390,6 +878,7 @@ T reverse_scan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
     MPI_Comm_free(&rev);
     return result;
 }
+*/
 
 
 /*********************
@@ -423,5 +912,8 @@ inline bool none_of(bool x, const mxx::comm& comm = mxx::comm()) {
 }
 
 } // namespace mxx
+
+#define MXX_REDUCTION_DONE
+#include "comm_def.hpp"
 
 #endif // MXX_REDUCTION_HPP

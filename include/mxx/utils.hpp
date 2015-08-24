@@ -29,6 +29,15 @@
 
 namespace mxx {
 
+std::string get_processor_name() {
+    char p_name[MPI_MAX_PROCESSOR_NAME+1];
+    int p_len;
+    MPI_Get_processor_name(p_name, &p_len);
+    p_name[p_len] = '\0'; // make string NULL-terminated (if not yet so)
+    std::string str(p_name);
+    return str;
+}
+
 /**
  * @brief   Prints out summary information of which MPI processes (ranks)
  *          are running on which nodes.

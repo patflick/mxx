@@ -21,8 +21,8 @@
 
 // mxx includes
 #include "datatypes.hpp"
-#include "shift.hpp" // FIXME import only `requests`
-#include "comm.hpp"
+#include "comm_fwd.hpp"
+#include "future.hpp"
 #include "big_collective.hpp"
 
 /// main namespace for mxx
@@ -1360,5 +1360,9 @@ std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& s
 
 
 } // namespace mxx
+
+// include comm definitions
+#define MXX_COLLECTIVE_DONE
+#include "comm_def.hpp"
 
 #endif // MXX_COLLECTIVE_HPP
