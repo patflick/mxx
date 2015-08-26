@@ -85,6 +85,25 @@ public:
  *                     User supplied functions:                      *
  *********************************************************************/
 
+//  std::min and std::max are overloaded functions, and thus can't easily
+//  be passed as functors.
+//  Thus we define functors mxx::min<T> and mxx::max<T> with similar
+//  declarations as std::plus, std::multiply etc
+
+template <typename T>
+struct min {
+    inline const T& operator()(const T& x, const T& y) const {
+        return std::min(x, y);
+    }
+};
+
+template <typename T>
+struct max {
+    inline const T& operator()(const T& x, const T& y) const {
+        return std::max(x, y);
+    }
+};
+
 // an Op is not built-in in general:
 template <typename T, typename Func>
 struct get_builtin_op {
@@ -110,6 +129,8 @@ MXX_BUILTIN_OP(MPI_LOR, std::logical_or);
 MXX_BUILTIN_OP(MPI_BOR, std::bit_or);
 MXX_BUILTIN_OP(MPI_BXOR, std::bit_xor);
 MXX_BUILTIN_OP(MPI_BAND, std::bit_and);
+MXX_BUILTIN_OP(MPI_MAX, mxx::max);
+MXX_BUILTIN_OP(MPI_MIN, mxx::min);
 
 #undef MXX_BUILTIN_OP
 
@@ -254,6 +275,7 @@ private:
 };
 
 
+
 /*********************************************************************
  *                Reductions                                         *
  *********************************************************************/
@@ -277,7 +299,9 @@ inline void reduce(const T* in, size_t n, T* out, int root, const mxx::comm& com
 
 template <typename T, typename Func>
 inline std::vector<T> reduce(const T* in, size_t n, int root, Func func, const mxx::comm& comm = mxx::comm()) {
-    std::vector<T> result(n);
+    std::vector<T> result;
+    if (comm.rank() == root)
+        result.resize(n);
     reduce(in, n, &result[0], root, func, comm);
     return result;
 }
@@ -373,7 +397,7 @@ inline T allreduce(const T& x, const mxx::comm& comm = mxx::comm()) {
 // local reduce
 
 template <typename Iterator, typename Func>
-inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterator begin, Iterator end, Func func) {
+inline typename std::iterator_traits<Iterator>::value_type local_reduce(Iterator begin, Iterator end, Func func) {
     assert(std::distance(begin, end) >= 1);
     typedef typename std::iterator_traits<Iterator>::value_type T;
     T init = std::accumulate(begin+1, end, *begin, func);
@@ -381,7 +405,7 @@ inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterato
 }
 
 template <typename Iterator>
-inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterator begin, Iterator end) {
+inline typename std::iterator_traits<Iterator>::value_type local_reduce(Iterator begin, Iterator end) {
     return local_reduce(begin, end, std::plus<typename std::iterator_traits<Iterator>::value_type>());
 }
 
@@ -405,7 +429,7 @@ inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterato
     size_t n = std::distance(begin, end);
     typedef typename std::iterator_traits<Iterator>::value_type T;
 
-    if (mxx::allreduce((int)(n >= 1), [](int x, int y) { return (int)(x && y); }, comm) != 0) {
+    if (mxx::allreduce((int)(n >= 1), [](int x, int y) { return (int)(x && y); }, comm) == 0) {
         // some processors have 0 elements
         mxx::comm nonzero_comm = comm.split(n >= 1);
         if (n == 0 && nonzero_comm.size() == comm.size()) {
@@ -419,7 +443,7 @@ inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterato
             // local reduction
             result = std::accumulate(begin+1, end, *begin, func);
             // reduction in nonzero subcommunicator
-            result = reduce(result, func, 0, nonzero_comm);
+            result = reduce(result, 0, func, nonzero_comm);
             // determine rank of first element of nonzero comm
             if (nonzero_comm.rank() == 0)
                 bcast_rank = comm.rank();
@@ -594,6 +618,7 @@ void global_scan(InIterator begin, InIterator end, OutIterator out, Func func, c
         // accumulate previous sum on all local elements
         for (size_t i = 0; i < n; ++i) {
             *o = func(presum, *o);
+            ++o;
         }
     }
 }
@@ -616,6 +641,7 @@ inline void global_scan_inplace(Iterator begin, Iterator end, Func func, const m
         // accumulate previous sum on all local elements
         for (size_t i = 0; i < n; ++i) {
             *o = func(presum, *o);
+            ++o;
         }
     }
 }
@@ -632,12 +658,12 @@ inline void global_scan_inplace(Iterator begin, Iterator end, const mxx::comm& c
 
 // std::vector overloads
 template <typename T, typename Func>
-inline void global_scan_inplace(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+inline void global_scan_inplace(std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
     global_scan_inplace(in.begin(), in.end(), func, comm);
 }
 
 template <typename T>
-inline void global_scan_inplace(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+inline void global_scan_inplace(std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
     global_scan_inplace(in.begin(), in.end(), std::plus<T>(), comm);
 }
 
@@ -649,7 +675,7 @@ inline std::vector<T> global_scan(const std::vector<T>& in, Func func, const mxx
 }
 
 template <typename T>
-inline void global_scan(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+inline std::vector<T> global_scan(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
     std::vector<T> result(in.size());
     global_scan(in.begin(), in.end(), result.begin(), std::plus<T>(), comm);
     return result;
@@ -716,8 +742,9 @@ void local_exscan(InIterator begin, InIterator end, OutIterator out, Func func) 
 
     // calculate the exclusive prefix sum
     while (begin != end) {
-        *out = val;
+        T tmp = val;
         val = func(val,*begin);
+        *out = tmp;
         ++begin;
         ++out;
     }
@@ -739,8 +766,9 @@ void local_exscan_inplace(Iterator begin, Iterator end, Func func) {
 
     // calculate the exclusive prefix sum
     while (begin != end) {
-        *begin = val;
+        T tmp = val;
         val = func(val,*begin);
+        *begin = tmp;
         ++begin;
     }
 }
@@ -788,18 +816,18 @@ void global_exscan(InIterator begin, InIterator end, OutIterator out, Func func,
     size_t n = std::distance(begin, end);
     mxx::comm nonzero_comm = comm.split(n > 0);
     if (n > 0) {
+        typedef typename std::iterator_traits<OutIterator>::value_type T;
+        T sum = *(begin+(n-1));
         // local scan
         local_exscan(begin, end, out, func);
         // mxx::scan
-        typedef typename std::iterator_traits<OutIterator>::value_type T;
-        T sum = T();
-        if (n > 0)
-            sum = *(end-1) + *(o + (n-1));
+        sum += *(o + (n-1));
         T presum = exscan(sum, func, nonzero_comm);
-
+        *o++ = presum;
         // accumulate previous sum on all local elements
-        for (size_t i = 0; i < n; ++i) {
+        for (size_t i = 1; i < n; ++i) {
             *o = func(presum, *o);
+            ++o;
         }
     }
 }
@@ -813,19 +841,17 @@ inline void global_exscan_inplace(Iterator begin, Iterator end, Func func, const
     mxx::comm nonzero_comm = comm.split(n > 0);
     if (n > 0) {
         typedef typename std::iterator_traits<Iterator>::value_type T;
-        T sum = T();
-        if (n > 0)
-            sum = *(end-1);
+        T sum = *(begin+(n-1));
         // local inplace scan
         local_exscan_inplace(begin, end, func);
+        sum += *(begin+(n-1));
         // mxx::exscan
-        if (n > 0)
-            sum += *(end-1);
         T presum = exscan(sum, func, nonzero_comm);
-
+        *o++ = presum;
         // accumulate previous sum on all local elements
-        for (size_t i = 0; i < n; ++i) {
+        for (size_t i = 1; i < n; ++i) {
             *o = func(presum, *o);
+            ++o;
         }
     }
 }
@@ -842,12 +868,12 @@ inline void global_exscan_inplace(Iterator begin, Iterator end, const mxx::comm&
 
 // std::vector overloads
 template <typename T, typename Func>
-inline void global_exscan_inplace(const std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
+inline void global_exscan_inplace(std::vector<T>& in, Func func, const mxx::comm& comm = mxx::comm()) {
     global_exscan_inplace(in.begin(), in.end(), func, comm);
 }
 
 template <typename T>
-inline void global_exscan_inplace(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+inline void global_exscan_inplace(std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
     global_exscan_inplace(in.begin(), in.end(), std::plus<T>(), comm);
 }
 
@@ -859,7 +885,7 @@ inline std::vector<T> global_exscan(const std::vector<T>& in, Func func, const m
 }
 
 template <typename T>
-inline void global_exscan(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+inline std::vector<T> global_exscan(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
     std::vector<T> result(in.size());
     global_exscan(in.begin(), in.end(), result.begin(), std::plus<T>(), comm);
     return result;

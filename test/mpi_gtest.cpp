@@ -124,7 +124,14 @@ class MpiTestEventListener : public TestEventListener {
                     message.resize(len);
                     MPI_Recv(&message[0], len, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                    ADD_FAILURE_AT(filename.c_str(), line) << "[On Rank " << i << "] " << message;
+                    // modify message, add `[Rank x]` in front of each line
+                    std::istringstream iss(message);
+                    std::stringstream ss;
+                    std::string linestr;
+                    while (std::getline(iss, linestr)) {
+                        ss << "[Rank " << i << "] " << linestr << std::endl;
+                    }
+                    ADD_FAILURE_AT(filename.c_str(), line) << ss.str();
 
                     // receive next line or end message
                     MPI_Recv(&line, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
