@@ -15,7 +15,6 @@
 #define MXX_BIG_COLLECTIVE_HPP
 
 #include <vector>
-#include <assert.h>
 
 #include "comm.hpp"
 #include "datatypes.hpp"
@@ -47,7 +46,7 @@ std::vector<index_t> get_displacements(const std::vector<index_t>& counts)
         tmp = sum;
         // assert that the sum will still fit into the index type (MPI default:
         // int)
-        assert((std::size_t)sum + (std::size_t)*begin < (std::size_t) std::numeric_limits<index_t>::max());
+        MXX_ASSERT((std::size_t)sum + (std::size_t)*begin < (std::size_t) std::numeric_limits<index_t>::max());
         sum += *begin;
         *begin = tmp;
         ++begin;
@@ -263,8 +262,8 @@ void all2allv_big(const T* msgs, const std::vector<size_t>& send_sizes, T* out, 
     // point-to-point implementation
     // TODO: implement MPI_Alltoallw variant
     // TODO: try RMA
-    assert(send_sizes.size() == comm.size());
-    assert(recv_sizes.size() == comm.size());
+    MXX_ASSERT(static_cast<int>(send_sizes.size()) == comm.size());
+    MXX_ASSERT(static_cast<int>(recv_sizes.size()) == comm.size());
     std::vector<size_t> send_displs = get_displacements(send_sizes);
     std::vector<size_t> recv_displs = get_displacements(recv_sizes);
     // TODO: unify tag usage

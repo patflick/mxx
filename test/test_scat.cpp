@@ -71,8 +71,8 @@ TEST(MxxColl, ScatterUnknownSize) {
         msg2 = mxx::scatter_recv<int>(0);
     }
 
-    ASSERT_EQ(13, msg1.size());
-    ASSERT_EQ(13, msg2.size());
+    ASSERT_EQ(13, (int)msg1.size());
+    ASSERT_EQ(13, (int)msg2.size());
     for (int j = 0; j < 13; ++j) {
         ASSERT_EQ(-2*j+c.rank(), msg1[j]);
         ASSERT_EQ(-2*j+c.rank(), msg2[j]);
@@ -161,7 +161,7 @@ TEST(MxxColl, ScattervConvenience) {
 
     // test convenience functions
     result = mxx::scatterv(&vec[0], sizes, c.rank()+1, 0, c);
-    ASSERT_EQ(c.rank()+1, result.size());
+    ASSERT_EQ(c.rank()+1, (int)result.size());
     for (int j = 0; j < (int)result.size(); ++j) {
         ASSERT_EQ(13*j-23*c.rank(), result[j]);
     }
@@ -171,14 +171,14 @@ TEST(MxxColl, ScattervConvenience) {
         result.resize(c.rank() + 1);
         mxx::scatterv_recv(&result.front(), c.rank()+1, 0);
     }
-    ASSERT_EQ(c.rank()+1, result.size());
+    ASSERT_EQ(c.rank()+1, (int)result.size());
     for (int j = 0; j < (int)result.size(); ++j) {
         ASSERT_EQ(13*j-23*c.rank(), result[j]);
     }
 
     // test convenience functions
     result = mxx::scatterv(vec, sizes, c.rank()+1, 0, c);
-    ASSERT_EQ(c.rank()+1, result.size());
+    ASSERT_EQ(c.rank()+1, (int)result.size());
     for (int j = 0; j < (int)result.size(); ++j) {
         ASSERT_EQ(13*j-23*c.rank(), result[j]);
     }
@@ -210,7 +210,7 @@ TEST(MxxColl, ScattervUnknownSize) {
         result = mxx::scatterv_recv<int>(c.size()-1);
     }
 
-    ASSERT_EQ(5*(c.size()-c.rank())-3, result.size());
+    ASSERT_EQ(5*(c.size()-c.rank())-3, (int)result.size());
     for (int j = 0; j < (int)result.size(); ++j) {
         ASSERT_EQ(-2340*j+444*c.rank(), result[j]);
     }
@@ -224,14 +224,14 @@ TEST(MxxColl, GatherOne) {
     std::vector<std::pair<int, double> > pairs = mxx::gather(x, 0);
 
     if (c.rank() == 0) {
-        ASSERT_EQ(c.size(), pairs.size());
+        ASSERT_EQ(c.size(), (int)pairs.size());
         for (int i = 0; i < c.size(); ++i)
         {
             ASSERT_EQ(13*i, pairs[i].first);
             ASSERT_EQ(3.141/i, pairs[i].second);
         }
     } else {
-        ASSERT_EQ(0, pairs.size());
+        ASSERT_EQ(0, (int)pairs.size());
     }
 }
 
@@ -254,7 +254,7 @@ TEST(MxxColl, GatherGeneral) {
     if (c.rank() == c.size()-1) {
         for (int i = 0; i < c.size(); ++i) {
             for (int j = 0; j < (int)size; ++j) {
-                ASSERT_EQ(j*3*i, all[i*size + j]);
+                ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
             }
         }
     }
@@ -265,11 +265,11 @@ TEST(MxxColl, GatherGeneral) {
         ASSERT_EQ(size*c.size(), all.size());
         for (int i = 0; i < c.size(); ++i) {
             for (int j = 0; j < (int)size; ++j) {
-                ASSERT_EQ(j*3*i, all[i*size + j]);
+                ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
             }
         }
     } else {
-        ASSERT_EQ(0, all.size());
+        ASSERT_EQ(0, (int)all.size());
     }
     // test convenience functions
     all = mxx::gather(els, c.size()-1, MPI_COMM_WORLD);
@@ -277,11 +277,11 @@ TEST(MxxColl, GatherGeneral) {
         ASSERT_EQ(size*c.size(), all.size());
         for (int i = 0; i < c.size(); ++i) {
             for (int j = 0; j < (int)size; ++j) {
-                ASSERT_EQ(j*3*i, all[i*size + j]);
+                ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
             }
         }
     } else {
-        ASSERT_EQ(0, all.size());
+        ASSERT_EQ(0, (int)all.size());
     }
 }
 
@@ -328,7 +328,7 @@ TEST(MxxColl, GathervGeneral) {
             }
         }
     } else {
-        ASSERT_EQ(0, all.size());
+        ASSERT_EQ(0u, all.size());
     }
     // convenience functions
     all = mxx::gatherv(els, recv_sizes, 0);
@@ -341,7 +341,7 @@ TEST(MxxColl, GathervGeneral) {
             }
         }
     } else {
-        ASSERT_EQ(0, all.size());
+        ASSERT_EQ(0u, all.size());
     }
 }
 
@@ -373,7 +373,7 @@ TEST(MxxColl, GathervUnknownSize) {
             }
         }
     } else {
-        ASSERT_EQ(0, all.size());
+        ASSERT_EQ(0u, all.size());
     }
     // convenience function (taking vector)
     all = mxx::gatherv(els, 0);
@@ -386,7 +386,7 @@ TEST(MxxColl, GathervUnknownSize) {
             }
         }
     } else {
-        ASSERT_EQ(0, all.size());
+        ASSERT_EQ(0u, all.size());
     }
 }
 
@@ -396,7 +396,7 @@ TEST(MxxColl, AllgatherOne) {
     // allgather
     std::vector<std::pair<int, double> > pairs = mxx::allgather(x);
 
-    ASSERT_EQ(c.size(), pairs.size());
+    ASSERT_EQ(c.size(), (int)pairs.size());
     for (int i = 0; i < c.size(); ++i)
     {
         ASSERT_EQ(13*i, pairs[i].first);
@@ -420,7 +420,7 @@ TEST(MxxColl, AlllgatherGeneral) {
 
     for (int i = 0; i < c.size(); ++i) {
         for (int j = 0; j < (int)size; ++j) {
-            ASSERT_EQ(j*3*i, all[i*size + j]);
+            ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
         }
     }
 
@@ -429,7 +429,7 @@ TEST(MxxColl, AlllgatherGeneral) {
     ASSERT_EQ(size*c.size(), all.size());
     for (int i = 0; i < c.size(); ++i) {
         for (int j = 0; j < (int)size; ++j) {
-            ASSERT_EQ(j*3*i, all[i*size + j]);
+            ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
         }
     }
     // test convenience functions
@@ -437,7 +437,7 @@ TEST(MxxColl, AlllgatherGeneral) {
     ASSERT_EQ(size*c.size(), all.size());
     for (int i = 0; i < c.size(); ++i) {
         for (int j = 0; j < (int)size; ++j) {
-            ASSERT_EQ(j*3*i, all[i*size + j]);
+            ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
         }
     }
 }
@@ -546,7 +546,7 @@ TEST(MxxColl, All2allOne) {
 
     // send back
     std::vector<std::pair<int, int> > result2 = mxx::all2all(result, c);
-    ASSERT_EQ(c.size(), result2.size());
+    ASSERT_EQ(c.size(), (int)result2.size());
     // check the result
     for (int i = 0; i < c.size(); ++i) {
         ASSERT_EQ(i*c.rank(), result2[i].first);
@@ -556,7 +556,7 @@ TEST(MxxColl, All2allOne) {
     // test the last convenience function
     std::vector<std::pair<int, int> > result3 = mxx::all2all(&result2[0], 1);
     // check result
-    ASSERT_EQ(c.size(), result3.size());
+    ASSERT_EQ(c.size(), (int)result3.size());
     for (int i = 0; i < c.size(); ++i) {
         ASSERT_EQ(result[i].first, result3[i].first);
         ASSERT_EQ(result[i].second, result3[i].second);
@@ -575,7 +575,7 @@ TEST(MxxColl, All2allGeneral) {
     }
 
     std::vector<int> result = mxx::all2all(msgs);
-    ASSERT_EQ(size*c.size(), result.size());
+    ASSERT_EQ(size*c.size(), (int)result.size());
     for (int i = 0; i < c.size(); ++i) {
         for (int j = 0; j < size; ++j) {
             ASSERT_EQ(i*c.rank()*33 - 2*j, result[i*size + j]);

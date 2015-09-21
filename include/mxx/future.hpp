@@ -76,6 +76,7 @@ public:
     // TODO: functions to access/return `MPI_Status`
 
     virtual ~requests() {
+        // TODO: just use waitall again?
         for (MPI_Request& r : m_requests) {
             if (r != MPI_REQUEST_NULL)
                 MPI_Request_free(&r);
@@ -119,12 +120,6 @@ public:
         m_ever_valid = true;
     }
 
-    value_type get() {
-        this->wait();
-        m_valid = false;
-        return std::move(*m_data);
-    }
-
     virtual ~future_base() {
         // check if this has ever been valid. If not: wait(), otherwise
         // destruct the m_data member (happens anyway)
@@ -133,10 +128,6 @@ public:
     }
 
 protected:
-    // functions only accessible by the future_builder
-    value_type* data() {
-        return m_data.get();
-    }
 
     /// Default construction creates the output memory space (for MPI to write
     /// into).
@@ -150,8 +141,6 @@ protected:
     friend class mxx::future_builder<T>;
 
 protected:
-    typedef std::unique_ptr<value_type> ptr_type;
-    ptr_type m_data;
     bool m_valid;
     bool m_ever_valid;
     requests m_req;
@@ -234,6 +223,9 @@ protected:
 };
 
 
+// similar to a std::promise, this is a friend of mxx::future and
+// enables mxx functions to build a mxx::future containing the
+// yet to be written to buffers
 template <typename T>
 class future_builder {
 public:

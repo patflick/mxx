@@ -12,8 +12,6 @@
 #include <mxx/comm.hpp>
 #include <mxx/reduction.hpp>
 
-#include <cxx-prettyprint/prettyprint.hpp>
-
 
 // test internal details of custom ops
 
@@ -107,7 +105,6 @@ int mymin(int x, int y) {
 TEST(MxxReduce, ReduceOne) {
     mxx::comm c = mxx::comm();
 
-
     // test min
     int x = -13*(c.size() - c.rank());
     int y = mxx::reduce(x, c.size()/2, mxx::min<int>(), c);
@@ -160,12 +157,12 @@ TEST(MxxReduce, ReduceVec) {
 
     std::vector<int> w = mxx::reduce(v, c.size()/2, c);
     if (c.rank() == c.size()/2) {
-        ASSERT_EQ(n, w.size());
+        ASSERT_EQ(n, (int)w.size());
         for (int i = 0; i < n; ++i) {
             ASSERT_EQ(ranksum + i*c.size(), w[i]);
         }
     } else {
-        ASSERT_EQ(0, w.size());
+        ASSERT_EQ(0u, w.size());
     }
 }
 
@@ -182,7 +179,7 @@ TEST(MxxReduce, AllReduceVec) {
     }
 
     std::vector<int> w = mxx::allreduce(v);
-    ASSERT_EQ(n, w.size());
+    ASSERT_EQ(n, (int)w.size());
     for (int i = 0; i < n; ++i) {
         ASSERT_EQ(c.size()*i, w[i]);
     }
@@ -192,7 +189,7 @@ TEST(MxxReduce, AllReduceVec) {
     if (c.size() % 2 == 1 && c.rank() % 2 == 0)
         ++mysize;
     ASSERT_EQ(mysize, c.split(c.rank() % 2).size());
-    ASSERT_EQ(n, w.size());
+    ASSERT_EQ(n, (int)w.size());
     for (int i = 0; i < n; ++i) {
         ASSERT_EQ(mysize*i, w[i]);
     }

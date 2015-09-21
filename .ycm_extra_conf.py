@@ -103,6 +103,8 @@ flags = [
 '../../src',
 '-I',
 '/usr/lib/openmpi/include',
+'-I',
+'/usr/lib/mpich/include',
 # as workaround for libclang to find includes, output of:
 # echo | clang -v -E -x c++ -
 #'-isystem',

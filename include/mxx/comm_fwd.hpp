@@ -16,10 +16,14 @@
 #include <functional>
 #include <limits>
 
+#include "common.hpp"
 #include "future.hpp"
 #include "datatypes.hpp"
 
 namespace mxx {
+
+static constexpr int any_tag = MPI_ANY_TAG;
+static constexpr int any_source = MPI_ANY_SOURCE;
 
 class comm {
 public:
@@ -38,7 +42,6 @@ public:
         init_ranksize();
     }
 
-public:
     // disable copying
     comm(const comm& o) = delete;
     // disable copy assignment
@@ -53,14 +56,16 @@ public:
 
     /// Move assignment
     comm& operator=(comm&& o) {
-        free();
-        mpi_comm = o.mpi_comm;
-        m_size = o.m_size;
-        m_rank = o.m_rank;
-        do_free = o.do_free;
-        o.mpi_comm = MPI_COMM_NULL;
-        o.m_size = o.m_rank = 0;
-        o.do_free = false;
+        if (&o != this) {
+            free();
+            mpi_comm = o.mpi_comm;
+            m_size = o.m_size;
+            m_rank = o.m_rank;
+            do_free = o.do_free;
+            o.mpi_comm = MPI_COMM_NULL;
+            o.m_size = o.m_rank = 0;
+            o.do_free = false;
+        }
         return *this;
     }
 
@@ -73,7 +78,7 @@ public:
      *
      * @return  The new, duplicated communicator.
      */
-    comm&& copy() const {
+    comm copy() const {
         comm o;
         MPI_Comm_dup(mpi_comm, &o.mpi_comm);
         o.init_ranksize();
@@ -163,6 +168,7 @@ public:
         return m_rank;
     }
 
+    /// Collective barrier call for all processes in `this` communicator.
     void barrier() const {
         MPI_Barrier(this->mpi_comm);
     }
@@ -174,13 +180,13 @@ private:
         }
     }
 
-    bool is_builtin(const MPI_Comm& c) {
+    bool is_builtin(const MPI_Comm& c) const {
         return c == MPI_COMM_WORLD
             || c == MPI_COMM_SELF
             || c == MPI_COMM_NULL;
     }
 
-    bool is_builtin() {
+    bool is_builtin() const {
         return is_builtin(mpi_comm);
     }
 
@@ -191,89 +197,369 @@ private:
     }
 
 private:
+    /// The MPI Communicator being wrapped
     MPI_Comm mpi_comm;
+    /// The size of the communicator
     int m_size;
+    /// This process' rank in this communicator
     int m_rank;
+    /// Whether or not to free the MPI_Comm object upon destruction of `this`.
     bool do_free;
+
+public:
+
+    /**************
+     *  MPI send  *
+     **************/
+
+    /// Send a basic (fixed size) datatype
+    template <typename T>
+    inline void send(const T& msg, int dest, int tag = 0) const {
+        MXX_ASSERT(sizeof(T) < mxx::max_int);
+        MXX_ASSERT(0 <= dest && dest < this->size());
+        mxx::datatype<T> dt;
+        MPI_Send(const_cast<T*>(&msg), 1, dt.type(), dest, tag, this->mpi_comm);
+    }
+
+    /// send a block of memory of a specified base datatype
+    template <typename T>
+    inline void send(const T* msg, size_t size, int dest, int tag = 0) const {
+        MXX_ASSERT(0 <= dest && dest < this->size());
+        MXX_ASSERT(msg != nullptr);
+        if (size < mxx::max_int) {
+            mxx::datatype<T> dt;
+            MPI_Send(const_cast<T*>(msg), size, dt.type(), dest, tag, this->mpi_comm);
+        } else {
+            mxx::datatype_contiguous<T> dt(size);
+            MPI_Send(const_cast<T*>(msg), 1, dt.type(), dest, tag, this->mpi_comm);
+        }
+    }
+
+    /// Send a std::vector
+    template <typename T>
+    inline void send(const std::vector<T>& msg, int dest, int tag = 0) const {
+        this->send(&msg[0], msg.size(), dest, tag);
+    }
+
+    /// Send a std::string
+    template <typename CharT, class Traits = std::char_traits<CharT>, class Alloc = std::allocator<CharT> >
+    inline void send(const std::basic_string<CharT, Traits, Alloc>& msg, int dest, int tag = 0) const {
+        this->send(&msg[0], msg.size(), dest, tag);
+    }
+
+    /// pass string literal to comm::send
+    template <typename CharT, size_t N>
+    inline void send(const CharT(&msg)[N], int dest, int tag = 0) const {
+        MXX_ASSERT(N < mxx::max_int);
+        MXX_ASSERT(0 <= dest && dest < this->size());
+        mxx::datatype<CharT> dt;
+        MPI_Send(const_cast<CharT*>(msg), N-1, dt.type(), dest, tag, this->mpi_comm);
+    }
+
+
+    /***********************
+     *  Non-blocking Send  *
+     ***********************/
+
+    /// Send a basic (fixed size) datatype
+    template <typename T>
+    inline mxx::future<void> isend(const T& msg, int dest, int tag = 0) const {
+        MXX_ASSERT(sizeof(T) < mxx::max_int);
+        MXX_ASSERT(0 <= dest && dest < this->size());
+        mxx::datatype<T> dt;
+        mxx::future_builder<void> f;
+        MPI_Isend(const_cast<T*>(&msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
+        return std::move(f.get_future());
+    }
+
+    /// send a block of memory of a specified base datatype
+    template <typename T>
+    inline mxx::future<void> isend(const T* msg, size_t size, int dest, int tag = 0) const {
+        MXX_ASSERT(0 <= dest && dest < this->size());
+        mxx::future_builder<void> f;
+        if (size < mxx::max_int) {
+            mxx::datatype<T> dt;
+            MPI_Isend(const_cast<T*>(msg), size, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
+        } else {
+            mxx::datatype_contiguous<T> dt(size);
+            MPI_Isend(const_cast<T*>(msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
+        }
+        return std::move(f.get_future());
+    }
+
+    /// send a std::vector
+    template <typename T>
+    inline mxx::future<void> isend(const std::vector<T>& msg, int dest, int tag = 0) const {
+        return std::move(this->isend(&msg[0], msg.size(), dest, tag));
+    }
+
+    /// Send a std::string
+    template <typename CharT, class Traits = std::char_traits<CharT>, class Alloc = std::allocator<CharT> >
+    inline mxx::future<void> isend(const std::basic_string<CharT,Traits,Alloc>& msg, int dest, int tag = 0) const {
+        return std::move(this->isend(&msg[0], msg.size(), dest, tag));
+    }
+
+
+    /**********
+     *  Recv  *
+     **********/
+
+    // recv single element and return
+    template <typename T>
+    T recv(int src, int tag = mxx::any_tag) const;
+
+    // recv into given buffer of size 1
+    template <typename T>
+    void recv_into(T& buffer, int src, int tag = mxx::any_tag) const;
+
+    // recv into given buffer of given size
+    template <typename T>
+    void recv_into(T* buffer, size_t count, int src, int tag = mxx::any_tag) const;
+
+    // recv into vector and return
+    template <typename T, class Alloc = std::allocator<T>>
+    std::vector<T, Alloc> recv_vec(size_t size, int src, int tag = mxx::any_tag) const;
+
+    // recv into string and return
+    template <typename CharT = char, class Traits = std::char_traits<CharT>, class Alloc = std::allocator<CharT> >
+    std::basic_string<CharT, Traits, Alloc> recv_str(size_t size, int src, int tag = mxx::any_tag) const;
+
+
+    /***************************
+     *  Non-blocking receives  *
+     ***************************/
+
+    // recv single element and return
+    template <typename T>
+    mxx::future<T> irecv(int src, int tag = mxx::any_tag) const;
+
+    // recv into given buffer of size 1
+    // TODO: should this function be disabled for strict buffer protection?
+    template <typename T>
+    mxx::future<void> irecv_into(T& buffer, int src, int tag = mxx::any_tag) const;
+
+    // recv into given buffer of given size
+    template <typename T>
+    mxx::future<void> irecv_into(T* buffer, size_t count, int src, int tag = mxx::any_tag) const;
+
+    // recv into vector and return
+    template <typename T, class Alloc = std::allocator<T>>
+    mxx::future<std::vector<T, Alloc> > irecv_vec(size_t size, int src, int tag = mxx::any_tag) const;
+
+    // recv into string and return
+    template <typename CharT = char, class Traits = std::char_traits<CharT>, class Alloc = std::allocator<CharT> >
+    mxx::future<std::basic_string<CharT, Traits, Alloc> > irecv_str(size_t size, int src, int tag = mxx::any_tag) const;
 };
-
-
-
-template <typename T>
-mxx::future<void> async_send(const T& msg, int dest, int tag) {
-    mxx::future_builder<void> f;
-    mxx::datatype<T> dt;
-    MPI_Isend(const_cast<T*>(&msg), 1, dt.type(), dest,
-              tag, mxx::comm(), &f.add_request());
-    return std::move(f.get_future());
-}
-
-template <typename T>
-/// TODO: handle case if vector size is larger than INT_MAX
-mxx::future<void> async_send(const std::vector<T>& msg, int dest, int tag) {
-    mxx::future_builder<void> f;
-    mxx::datatype<T> dt;
-    MPI_Isend(const_cast<T*>(&msg[0]), msg.size(), dt.type(), dest,
-              tag, mxx::comm(), &f.add_request());
-    return std::move(f.get_future());
-}
-
-template <typename T>
-void send(const T& msg, int dest, int tag) {
-
-}
-
-template <typename T>
-mxx::future<T> irecv(int src, int tag) {
-
-}
 
 template <typename T>
 struct recv_impl {
-    static void do_recv_into(int src, int tag, T& buf) {
+    static inline void do_recv_into(int src, int tag, T& buf, MPI_Comm c) {
         mxx::datatype<T> dt;
-        MPI_Recv(&buf, 1, dt.type(), src, tag, mxx::comm(), MPI_STATUS_IGNORE);
+        MPI_Recv(&buf, 1, dt.type(), src, tag, c, MPI_STATUS_IGNORE);
     }
-    static T do_recv(int src, int tag) {
+    static inline T do_recv(int src, int tag, MPI_Comm c) {
         T result;
-        do_recv_into(src, tag, result);
+        do_recv_into(src, tag, result, c);
         return result;
+    }
+};
+
+// receive previously unknown sized contiguous container class (std::vector or std::string)
+// uses:
+//  - `Container.resize(size)`  to resize the container to the size received
+//  - `&Container.operator[0]`  for getting the address of the first element
+//  - `Container::value_type`   to get the underlying data type
+//  The Container thus must be layed out contiguously in memory
+template <typename Container>
+struct recv_container_impl {
+    static inline void do_recv_into(int src, int tag, Container& buf, MPI_Comm c) {
+        // TODO: how do I do this in async?
+        typedef typename Container::value_type T;
+        mxx::datatype<T> dt;
+        MPI_Status stat;
+#if MPI_VERSION >= 3
+        // threadsafe version with MProbe and MRecv (only if MPI-3)
+        // and safe for > INT_MAX receives
+        MPI_Message msg;
+        MPI_Mprobe(src, tag, c, &msg, &stat);
+        size_t size;
+        MPI_Count count;
+        MPI_Get_elements_x(&stat, dt.type(), &count);
+        // TODO: (maybe) use a different mechanism for determining the
+        //               number of basic elements per item of type `T`,
+        //               e.g. by sending single element to MPI_COMM_SELF and MPI_Get_elements_x on status
+        //               and do so the first time a type gets created
+        //               and then cache the information in the datatype
+        MXX_ASSERT(count % mxx::datatype<T>::num_basic_elements == 0);
+        size = count / mxx::datatype<T>::num_basic_elements;
+        if (buf.size() != size)
+            buf.resize(size);
+        // receive into buffer
+        if (size < mxx::max_int) {
+            mxx::datatype<T> dt;
+            MPI_Mrecv(const_cast<T*>(&buf[0]), size, dt.type(), &msg, &stat);
+        } else {
+            mxx::datatype_contiguous<T> dt(size);
+            MPI_Mrecv(const_cast<T*>(&buf[0]), 1, dt.type(), &msg, &stat);
+        }
+#else
+        // TODO: use communicator lock for thread safety??
+        // TODO: not safe for messages with sizes larger than INT_MAX
+        MPI_Probe(src, tag, c, &stat);
+        int count;
+        MPI_Get_count(&stat, dt.type(), &count);
+        MXX_ASSERT(count >= 0); /* this assertion should fail if the message size was too large */
+        if (buf.size() != count)
+            buf.resize(count);
+        MPI_Recv(&buf[0], count, dt.type(), stat.MPI_SOURCE, stat.MPI_TAG, c, MPI_STATUS_IGNORE);
+#endif
     }
 };
 
 // template specialize for std::vector (variable sized!)
-template <typename T>
-struct recv_impl<std::vector<T> > {
-    static void do_recv_into(int src, int tag, std::vector<T>& buf) {
-        // TODO: threadsafe with MProbe and MRecv (only if MPI-3)
-        // TODO: how do I do this in async?
-        mxx::datatype<T> dt;
-        MPI_Status stat;
-        MPI_Probe(src, tag, mxx::comm(), &stat);
-        int count;
-        MPI_Get_count(&stat, dt.type(), &count);
-        std::cout << "receiving vector<int> of size: " << count << std::endl;
-        if (buf.size() < count)
-            buf.resize(count);
-        MPI_Recv(&buf[0], count, dt.type(), stat.MPI_SOURCE, stat.MPI_TAG, mxx::comm(), MPI_STATUS_IGNORE);
+template <typename T, class Alloc>
+struct recv_impl<std::vector<T, Alloc> > {
+    static inline void do_recv_into(int src, int tag, std::vector<T>& buf, MPI_Comm c) {
+        recv_container_impl<std::vector<T, Alloc> >::do_recv_into(src, tag, buf, c);
     }
-    static std::vector<T> do_recv(int src, int tag) {
-        std::vector<T> result;
-        do_recv_into(src, tag, result);
+    static inline std::vector<T, Alloc> do_recv(int src, int tag, MPI_Comm c) {
+        std::vector<T, Alloc> result;
+        recv_container_impl<std::vector<T, Alloc> >::do_recv_into(src, tag, result, c);
+        return result;
+    }
+};
+// template specialize for std::string (variable sized!)
+template <typename CharT, class Traits, class Alloc>
+struct recv_impl<std::basic_string<CharT, Traits, Alloc> > {
+    static inline void do_recv_into(int src, int tag, std::basic_string<CharT, Traits, Alloc>& buf, MPI_Comm c) {
+        recv_container_impl<std::basic_string<CharT, Traits, Alloc> >::do_recv_into(src, tag, buf, c);
+    }
+    static inline std::basic_string<CharT, Traits, Alloc> do_recv(int src, int tag, MPI_Comm c) {
+        std::basic_string<CharT, Traits, Alloc> result;
+        recv_container_impl<std::basic_string<CharT, Traits, Alloc> >::do_recv_into(src, tag, result, c);
         return result;
     }
 };
 
+// Regular templated receive returning the received data
+// supports std::string and std::vector additionally to supported mxx::datatypes
+// std::string and std::vector is only supported in blocking version
 template <typename T>
-T recv(int src, int tag) {
-    return recv_impl<T>::do_recv(src, tag);
+inline T comm::recv(int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    return recv_impl<T>::do_recv(src, tag, this->mpi_comm);
 }
 
 template <typename T>
-void recv_into(int src, int tag, T& result) {
-    return recv_impl<T>::do_recv_into(src, tag, result);
+inline void comm::recv_into(T& buffer, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    return recv_impl<T>::do_recv_into(src, tag, buffer, this->mpi_comm);
 }
+
+
+template <typename T>
+void comm::recv_into(T* buffer, size_t size, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    MXX_ASSERT(buffer != nullptr);
+    if (size < mxx::max_int) {
+        mxx::datatype<T> dt;
+        MPI_Recv(const_cast<T*>(buffer), size, dt.type(), src, tag, MPI_STATUS_IGNORE);
+    } else {
+        mxx::datatype_contiguous<T> dt(size);
+        MPI_Recv(const_cast<T*>(buffer), 1, dt.type(), src, tag, MPI_STATUS_IGNORE);
+    }
+}
+
+// recv into vector and return
+template <typename T, class Alloc>
+inline std::vector<T, Alloc> comm::recv_vec(size_t size, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    std::vector<T, Alloc> result(size);
+    this->recv_into(&result[0], size, src, tag);
+    return result;
+}
+
+// recv into string and return
+template <typename CharT, class Traits, class Alloc>
+inline std::basic_string<CharT, Traits, Alloc> comm::recv_str(size_t size, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    std::basic_string<CharT, Traits, Alloc> result;
+    result.resize(size);
+    this->recv_into(&result[0], size, src, tag);
+}
+
+/***********
+ *  Irecv  *
+ ***********/
+
+template <typename T>
+inline mxx::future<T> comm::irecv(int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    mxx::future_builder<T> f;
+    mxx::datatype<T> dt;
+    MPI_Irecv(f.data(), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    return std::move(f.get_future());
+}
+
+// only for fixed size types, doesn't support std::vector or std::basic_string
+// use `irecv_vec` or `irecv_str` instead
+template <typename T>
+inline mxx::future<void> comm::irecv_into(T& buffer, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    mxx::future_builder<void> f;
+    mxx::datatype<T> dt;
+    MPI_Irecv(&buffer, 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    return std::move(f.get_future());
+}
+
+// recv into given buffer of given size
+template <typename T>
+inline mxx::future<void> comm::irecv_into(T* buffer, size_t count, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    MXX_ASSERT(buffer != nullptr);
+    mxx::future_builder<void> f;
+    if (count < mxx::max_int) {
+        mxx::datatype<T> dt;
+        MPI_Irecv(buffer, count, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    } else {
+        mxx::datatype_contiguous<T> dt(count);
+        MPI_Irecv(buffer, 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    }
+    return std::move(f.get_future());
+}
+
+// recv into vector and return
+template <typename T, class Alloc>
+inline mxx::future<std::vector<T, Alloc> > comm::irecv_vec(size_t size, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    mxx::future_builder<std::vector<T, Alloc> > f;
+    f.data()->resize(size);
+    if (size < mxx::max_int) {
+        mxx::datatype<T> dt;
+        MPI_Irecv(&(f.data()->front()), size, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    } else {
+        mxx::datatype_contiguous<T> dt(size);
+        MPI_Irecv(&(f.data()->front()), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    }
+    return std::move(f.get_future());
+}
+
+// recv into string and return
+template <typename CharT, class Traits, class Alloc>
+inline mxx::future<std::basic_string<CharT, Traits, Alloc> > comm::irecv_str(size_t size, int src, int tag) const {
+    MXX_ASSERT(0 <= src && src < this->size());
+    mxx::future_builder<std::basic_string<CharT, Traits, Alloc> > f;
+    f.data()->resize(size);
+    if (size < mxx::max_int) {
+        mxx::datatype<CharT> dt;
+        MPI_Irecv(&(f.data()->front()), size, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    } else {
+        mxx::datatype_contiguous<CharT> dt(size);
+        MPI_Irecv(&(f.data()->front()), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
+    }
+    return std::move(f.get_future());
+}
+
 } // namespace mxx
-
 
 #endif // MXX_COMM_HPP

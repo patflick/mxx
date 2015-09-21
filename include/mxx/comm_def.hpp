@@ -40,7 +40,6 @@ comm comm::split_shared() const {
 
         // potentially further split in case of hash collisions
         // check if all names are the same per subcomm
-        // TODO: resolve fwd declarations and order of includes
         std::string next_name = mxx::left_shift(str, hash_comm);
         bool same = hash_comm.rank() == hash_comm.size()-1 || str == next_name;
         if (!mxx::all_of(same, hash_comm)) {

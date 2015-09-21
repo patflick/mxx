@@ -33,10 +33,18 @@ namespace mxx
  * Possible ways of implementation
  * 1) templated function get_mpi_dt<template T>(); (e.g. boost)
  *     -> doesn't allow partial template specialization
+ *        (needed for std::pair, std::tuple etc)
  * 2) overloaded functions with type deduction
- *     -> can't properly clean up types
+ *     -> can't properly clean up types (MPI_Type_free)
  * 3) templated class with static method (-> allows partial specialization)
- * 4) templated class with member method (allows proper Type_free)!!!
+ * 4) templated class with member method (allows proper C++ like Type_free)!!!
+ *
+ * Using option 4 due to best fit.
+ *
+ * TODO: other (maybe better) possibility:
+ * 5) using templated class with static methods and cache all created datatypes
+ *    in global static map (typeid(T) -> MPI_Datatype), freeing upon global
+ *    destruction
  */
 
 // TODO:
@@ -45,7 +53,7 @@ namespace mxx
 // - [ ] static function to return MPI_Datatype for builtin types!
 // - [ ] put attr_map in here!
 // - [ ] add to-string and caching
-// - [ ] unpacking types?
+// - [ ] implement MPI type introspection (get envelope)
 // - [ ] (see wrappers in official MPI C++ bindings)
 
 template <typename T>
@@ -119,6 +127,7 @@ template <> class datatype<ctype> {                                         \
 public:                                                                     \
     datatype() {}                                                           \
     MPI_Datatype type() const {return mpi_type;}                            \
+    static constexpr size_t num_basic_elements = 1;                         \
     virtual ~datatype() {}                                                  \
 };                                                                          \
                                                                             \
@@ -171,6 +180,7 @@ public:
     virtual ~datatype() {
         MPI_Type_free(&_type);
     }
+    static constexpr size_t num_basic_elements = size*datatype<T>::num_basic_elements;
 private:
     MPI_Datatype _type;
     datatype<T> _base_type;
@@ -219,6 +229,7 @@ public:
     virtual ~datatype() {
         MPI_Type_free(&_type);
     }
+    static constexpr size_t num_basic_elements = datatype<T1>::num_basic_elements + datatype<T2>::num_basic_elements;
 private:
     MPI_Datatype _type;
     datatype<T1> _base_type1;
@@ -260,6 +271,21 @@ struct tuple_members<N, 0>
     template<class ...Types>
     static void get(std::map<MPI_Aint, MPI_Datatype>&, std::tuple<datatype<Types>...>&) {
     }
+};
+
+template <class...Types>
+struct tuple_basic_els;
+
+template <class T, class...Types>
+struct tuple_basic_els<T,Types...>
+{
+    static constexpr size_t get_num = datatype<T>::num_basic_elements + tuple_basic_els<Types...>::get_num;
+};
+
+template <class T>
+struct tuple_basic_els<T>
+{
+    static constexpr size_t get_num = datatype<T>::num_basic_elements;
 };
 
 /**
@@ -321,6 +347,7 @@ public:
     virtual ~datatype() {
         MPI_Type_free(&_type);
     }
+    static constexpr size_t num_basic_elements = tuple_basic_els<Types...>::get_num;
 private:
     MPI_Datatype _type;
     datatypes_tuple_t _base_types;
