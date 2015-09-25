@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>Mxx by patflick</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">Mxx</h1>
+      <h2 class="project-tagline">C++11 Message Passing</h2>
+      <a href="https://github.com/patflick/mxx" class="btn">View on GitHub</a>
+      <a href="https://github.com/patflick/mxx/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/patflick/mxx/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <h1>
+<a id="mxx" class="anchor" href="#mxx" aria-hidden="true"><span class="octicon octicon-link"></span></a>mxx</h1>
+
+<p><code>mxx</code> is a <code>C++</code>/<code>C++11</code> template library for <code>MPI</code>. The main goal of this
+library is to provide two things:</p>
+
+<ol>
+<li>Simplified, efficient, and type-safe C++11 bindings to common MPI operations.</li>
+<li>A collection of scalable, high-performance standard algorithms for parallel
+distributed memory architectures, such as sorting.</li>
+</ol>
+
+<p>As such, <code>mxx</code> is targeting use in rapid <code>C++</code> and <code>MPI</code> algorithm
+development, prototyping, and deployment.</p>
+
+<h3>
+<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Features</h3>
+
+<ul>
+<li> All functions are templated by type. All <code>MPI_Datatype</code> are deducted
+from the C++ type given to the function.</li>
+<li> Custom reduction operations as lambdas, <code>std::function</code>, functor, or function
+pointer.</li>
+<li> Send/Receive and Collective operations take <code>size_t</code> sized input and
+automatically handle sizes larger than <code>INT_MAX</code>.</li>
+<li> Plenty of convenience functions and overloads for common MPI operations with
+sane defaults (e.g., super easy collectives: <code>std::vector&lt;size_t&gt; allsizes =
+mxx::allgather(local_size)</code>).</li>
+<li> Automatic type mapping of all built-in (<code>int</code>, <code>double</code>, etc) and other
+C++ types such as <code>std::tuple</code>, <code>std::pair</code>, and <code>std::array</code>.</li>
+<li> Non-blocking operations return a <code>mxx::future&lt;T&gt;</code> object, similar to
+<code>std::future</code>.</li>
+<li> Google Test based <code>MPI</code> unit testing framework</li>
+<li> Parallel sorting with similar API than <code>std::sort</code> (<code>mxx::sort</code>)</li>
+</ul>
+
+<h3>
+<a id="planned" class="anchor" href="#planned" aria-hidden="true"><span class="octicon octicon-link"></span></a>Planned</h3>
+
+<ul>
+<li>Parallel random number engines (for use with <code>C++11</code> standard library distributions)</li>
+<li>More parallel (standard) algorithms</li>
+<li>Wrappers for non-blocking collectives</li>
+<li>(maybe) serialization/de-serialization of non contiguous data types</li>
+<li>macros for easy datatype creation and handling for custom/own structs and classes</li>
+<li>Implementing and tuning different sorting algorithms</li>
+<li>Communicator classes for different topologies</li>
+<li>
+<code>mxx::env</code> similar to <code>boost::mpi::env</code> for wrapping <code>MPI_Init</code> and <code>MPI_Finalize</code>
+</li>
+</ul>
+
+<h3>
+<a id="status" class="anchor" href="#status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Status</h3>
+
+<p>Currently <code>mxx</code> is just a small personal project at very early stages.</p>
+
+<h3>
+<a id="examples" class="anchor" href="#examples" aria-hidden="true"><span class="octicon octicon-link"></span></a>Examples</h3>
+
+<h4>
+<a id="collective-operations" class="anchor" href="#collective-operations" aria-hidden="true"><span class="octicon octicon-link"></span></a>Collective Operations</h4>
+
+<p>This example shows the main features of <code>mxx</code>'s wrappers for MPI collective
+operations:</p>
+
+<ul>
+<li>  <code>MPI_Datatype</code> deduction according to the template type</li>
+<li>  Handling of message sizes larger than <code>INT_MAX</code> (everything is <code>size_t</code>
+enabled)</li>
+<li>  Receive sizes do not have to be specified</li>
+<li>  convenience functions for <code>std::vector</code>, both for sending and receiving</li>
+</ul>
+
+<div class="highlight highlight-source-c++"><pre>    <span class="pl-c">// local numbers, can be different size on each process</span>
+    std::vector&lt;<span class="pl-c1">size_t</span>&gt; local_numbers = ...;
+    <span class="pl-c">// allgather the local numbers, easy as pie:</span>
+    std::vector&lt;<span class="pl-c1">size_t</span>&gt; all_numbers = mxx::allgatherv(local_numbers, MPI_COMM_WORLD);</pre></div>
+
+<h4>
+<a id="reductions" class="anchor" href="#reductions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Reductions</h4>
+
+<p>The following example showcases the C++11 interface to reductions:</p>
+
+<div class="highlight highlight-source-c++"><pre>    #<span class="pl-k">include</span> <span class="pl-s"><span class="pl-pds">&lt;</span>mxx/reduction.hpp<span class="pl-pds">&gt;</span></span>
+
+    <span class="pl-c">// ...</span>
+    <span class="pl-c">// lets take some pairs and find the one with the max second element</span>
+    std::pair&lt;<span class="pl-k">int</span>, <span class="pl-k">double</span>&gt; v = ...;
+    std::pair&lt;<span class="pl-k">int</span>, <span class="pl-k">double</span>&gt; min_pair = mxx::allreduce(v,
+                           [](<span class="pl-k">const</span> std::pair&lt;<span class="pl-k">int</span>, <span class="pl-k">double</span>&gt;&amp; x,
+                              <span class="pl-k">const</span> std::pair&lt;<span class="pl-k">int</span>, <span class="pl-k">double</span>&gt;&amp; y){
+                               <span class="pl-k">return</span> x.<span class="pl-smi">second</span> &gt; y.<span class="pl-smi">second</span> ? x : y;
+                           });</pre></div>
+
+<p>What happens here, is that the C++ types are automatically matched to the
+appropriate <code>MPI_Datatype</code> (struct of <code>MPI_INT</code> and <code>MPI_DOUBLE</code>),
+then a custom reduction operator (<code>MPI_Op</code>) is created from
+the given lambda, and finally <code>MPI_Allreduce</code> called for the given parameters.</p>
+
+<h4>
+<a id="sorting" class="anchor" href="#sorting" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sorting</h4>
+
+<p>Consider a simple example, where you might want to sort tuples <code>(int key,double
+x, double y)</code> by key <code>key</code> in parallel using <code>MPI</code>. Doing so in pure C/MPI
+requires quite a lot of coding (~100 lines), debugging, and frustration. Thanks
+to <code>mxx</code> and <code>C++11</code>, this becomes as easy as:</p>
+
+<div class="highlight highlight-source-c++"><pre>    <span class="pl-k">typedef</span> std::tuple&lt;<span class="pl-k">int</span>, <span class="pl-k">double</span>, <span class="pl-k">double</span>&gt; tuple_type;
+    std::vector&lt;tuple_type&gt; <span class="pl-en">data</span>(local_size);
+    <span class="pl-c">// define a comparator for the tuple</span>
+    <span class="pl-k">auto</span> cmp = [](<span class="pl-k">const</span> tuple_type&amp; x, <span class="pl-k">const</span> tuple_type&amp; y) {
+                   <span class="pl-k">return</span> std::get&lt;<span class="pl-c1">0</span>&gt;(x) &lt; std::get&lt;<span class="pl-c1">0</span>&gt;(y); }
+
+    <span class="pl-c">// fill the vector ...</span>
+
+    <span class="pl-c">// call mxx::sort to do all the heavy lifting:</span>
+    <span class="pl-en">mxx::sort</span>(data.begin(), data.end(), cmp, MPI_COMM_WORLD);</pre></div>
+
+<p>In the background, <code>mxx</code> performs many things, including (but not limited to):</p>
+
+<ul>
+<li>mapping the <code>std::tuple</code> to a MPI type by creating the appropriate MPI
+datatype (i.e., <code>MPI_Type_struct</code>).</li>
+<li>distributing the data if not yet done so</li>
+<li>calling <code>std::sort</code> as a local base case, in case the communicator consists of a
+single processor, <code>mxx::sort</code> will fall-back to <code>std::sort</code>
+</li>
+<li>in case the data size exceeds the infamous <code>MPI</code> size limit of <code>MAX_INT</code>,
+<code>mxx</code> will not fail, but continue to work as expected</li>
+<li>redistributing the data so that it has the same distribution as given in the
+input to <code>mxx::sort</code>
+</li>
+</ul>
+
+<h3>
+<a id="alternatives" class="anchor" href="#alternatives" aria-hidden="true"><span class="octicon octicon-link"></span></a>Alternatives?</h3>
+
+<p>To our knowledge, there are two noteworthy, similar open libraries available.</p>
+
+<ol>
+<li>
+<a href="https://github.com/boostorg/mpi"><strong>boost::mpi</strong></a> offers C++ bindings for a
+large number of MPI functions. As such it corresponds to our main goal <em>1</em>.
+Major drawbacks of using <em>boost::mpi</em> are the unnecessary overhead of
+<em>boost::serialization</em> (especially in terms of memory overhead).
+<em>boost::mpi</em> also doesn't support large message sizes (&gt; <code>INT_MAX</code>), and
+the custom reduction operator implementation is rather limited.</li>
+<li>
+<a href="https://github.com/motonacciu/mpp"><strong>mpp</strong></a> offers low-overhead C++ bindings
+for MPI point-to-point communication primitives. As such, this solutions
+shows better performance than <em>boost::mpi</em>, but was never continued beyond
+point-to-point communication.</li>
+</ol>
+
+<h3>
+<a id="authors" class="anchor" href="#authors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Authors</h3>
+
+<ul>
+<li>Patrick Flick</li>
+</ul>
+
+<h2>
+<a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h2>
+
+<p>Since this is a header only library, simply copy and paste the <code>mxx</code> folder into
+your project, and you'll be all set.</p>
+
+<h3>
+<a id="dependencies" class="anchor" href="#dependencies" aria-hidden="true"><span class="octicon octicon-link"></span></a>Dependencies</h3>
+
+<p>At this point, <code>mxx</code> requires a <code>C++11</code> compatible version of <code>gcc</code>. Some
+functions still rely on <code>gcc</code> specific function calls. <code>mxx</code> currently works
+with <code>MPI-2</code> and <code>MPI-3</code>. However, some collective operations and sorting will
+work on data sizes <code>&gt;= 2 GB</code> only with <code>MPI-3</code>.</p>
+
+<h3>
+<a id="compiling" class="anchor" href="#compiling" aria-hidden="true"><span class="octicon octicon-link"></span></a>Compiling</h3>
+
+<p>Not necessary. This is a header only library. There is nothing to compile.</p>
+
+<h4>
+<a id="building-tests" class="anchor" href="#building-tests" aria-hidden="true"><span class="octicon octicon-link"></span></a>Building tests</h4>
+
+<p>The tests can be compiled using <code>cmake</code>:</p>
+
+<div class="highlight highlight-source-shell"><pre>mkdir build <span class="pl-k">&amp;&amp;</span> <span class="pl-c1">cd</span> build
+cmake ../ <span class="pl-k">&amp;&amp;</span> make</pre></div>
+
+<p>Running the tests (with however many processes you want).</p>
+
+<pre><code>mpirun -np 13 ./bin/test-all
+</code></pre>
+
+<h2>
+<a id="licensing" class="anchor" href="#licensing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Licensing</h2>
+
+<p>Our code is licensed under the
+<strong>Apache License 2.0</strong> (see <a href="LICENSE"><code>LICENSE</code></a>).
+The licensing does not apply to the <code>ext</code> folder, which contains external
+dependencies which are under their own licensing terms.</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/patflick/mxx">Mxx</a> is maintained by <a href="https://github.com/patflick">patflick</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
