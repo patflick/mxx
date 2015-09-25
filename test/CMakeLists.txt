@@ -16,9 +16,11 @@ target_link_libraries(test-scat mpi_gtest)
 add_executable(test-reductions test_reductions.cpp)
 target_link_libraries(test-reductions mpi_gtest)
 
-# TODO: remove this one later
 add_executable(test-send test_send.cpp)
-target_link_libraries(test-send ${EXTRA_LIBS})
+target_link_libraries(test-send mpi_gtest)
+
+add_executable(test-all test_scat.cpp test_reductions.cpp test_send.cpp)
+target_link_libraries(test-all mpi_gtest)
 
 ################
 #  Old tests:  #

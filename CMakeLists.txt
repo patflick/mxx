@@ -59,4 +59,5 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_SOURCE_DIR}/ext")
 include_directories("${PROJECT_SOURCE_DIR}/ext/cxx-prettyprint")
 
+# build tests
 add_subdirectory(test)

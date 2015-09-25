@@ -1,12 +1,28 @@
+/*
+ * Copyright 2015 Georgia Institute of Technology
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 /**
  * @file    collective.hpp
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @author  Nagakishore Jammula <njammula3@mail.gatech.edu>
  * @brief   Collective operations.
  *
- * Copyright (c) TODO
- *
- * TODO add Licence
+ * This file contains wrappers for collective operations. These are prior
+ * to a rewrite and "standardization" of function calls for mxx collective
+ * operations.
+ * TODO: implement all these functions in new `mxx`, and then remove this file.
  */
 
 

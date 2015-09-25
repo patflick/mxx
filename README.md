@@ -138,32 +138,6 @@ To our knowledge, there are two noteworthy, similar open libraries available.
 
 - Patrick Flick
 
-### Code organization
-
-The implementation is split into multiple headers:
-
-- [`algos.hpp`](algos.hpp) implements sequential algorithms, used only
-  internally in `mxx`.
-- [`collective.hpp`](collective.hpp) C++ wrappers around MPI collective
-  operations. At this time supports `all2all`, `gather/allgather`,
-  `scatter`, `reduce/allreduce`, `scan`, `exscan`.
-- [`datatypes.hpp`](datatypes.hpp) C++ type mapping to `MPI_Datatype`. This
-  supports all basic `C` datatypes and `std::array`, `std::pair`, `std::tuple`,
-  and further provides methods for users to supply their own datatype in a
-  simplified fashion.
-- [`distribution.hpp`](distribution.hpp) implements functions for data
-  distribution (e.g., equally distributing data among processors)
-- [`file.hpp`](file.hpp) implements some functionality for parallel reading and
-  writing of files. There is not much in there yet.
-- [`samplesort.hpp`](samplesort.hpp) implements the sample sort algorithm for
-  parallel distributed sorting. This is an internal file. For usage of
-  `mxx::sort`, see `sort.hpp`.
-- [`shift.hpp`](shift.hpp) implements simple wrappers for shift communication.
-- [`sort.hpp`](sort.hpp) implements the `mxx::sort` function.
-- [`utils.hpp`](utils.hpp) implements some utility functions, such as `gdb`
-  interaction and printing of node/rank distribution for large jobs.
-
-
 ## Installation
 
 Since this is a header only library, simply copy and paste the `mxx` folder into
@@ -180,9 +154,24 @@ work on data sizes `>= 2 GB` only with `MPI-3`.
 
 Not necessary. This is a header only library. There is nothing to compile.
 
-At some point, we will add some examples, and then say how these examples can be
-built.
+#### Building tests
+
+The tests can be compiled using `cmake`:
+
+```sh
+mkdir build && cd build
+cmake ../ && make
+```
+
+Running the tests (with however many processes you want).
+```
+mpirun -np 13 ./bin/test-all
+```
+
 
 ## Licensing
 
-TBD
+Our code is licensed under the
+*Apache License 2.0* (see [`LICENSE`](LICENSE)).
+The licensing does not apply to the `ext` folder, which contains external
+dependencies which are under their own licensing terms.
