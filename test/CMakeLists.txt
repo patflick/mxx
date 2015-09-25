@@ -10,8 +10,8 @@ project(mxx-test)
 add_library(mpi_gtest mpi_gtest.cpp ../ext/gtest/gtest-all.cc)
 target_link_libraries(mpi_gtest ${EXTRA_LIBS} pthread)
 
-add_executable(test-scat test_scat.cpp)
-target_link_libraries(test-scat mpi_gtest)
+add_executable(test-collective test_collective.cpp)
+target_link_libraries(test-collective mpi_gtest)
 
 add_executable(test-reductions test_reductions.cpp)
 target_link_libraries(test-reductions mpi_gtest)
@@ -19,7 +19,7 @@ target_link_libraries(test-reductions mpi_gtest)
 add_executable(test-send test_send.cpp)
 target_link_libraries(test-send mpi_gtest)
 
-add_executable(test-all test_scat.cpp test_reductions.cpp test_send.cpp)
+add_executable(test-all test_collective.cpp test_reductions.cpp test_send.cpp)
 target_link_libraries(test-all mpi_gtest)
 
 ################
