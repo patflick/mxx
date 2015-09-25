@@ -172,6 +172,6 @@ mpirun -np 13 ./bin/test-all
 ## Licensing
 
 Our code is licensed under the
-*Apache License 2.0* (see [`LICENSE`](LICENSE)).
+**Apache License 2.0** (see [`LICENSE`](LICENSE)).
 The licensing does not apply to the `ext` folder, which contains external
 dependencies which are under their own licensing terms.
