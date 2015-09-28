@@ -36,15 +36,13 @@
 namespace mxx {
 
 template<typename _Iterator, typename _Compare>
-void sort(_Iterator begin, _Iterator end, _Compare comp, MPI_Comm comm = MPI_COMM_WORLD, bool _AssumeBlockDecomp = true)
-{
+void sort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm = mxx::comm(), bool _AssumeBlockDecomp = true) {
     // use sample sort
     impl::samplesort<_Iterator, _Compare, false>(begin, end, comp, comm, _AssumeBlockDecomp);
 }
 
 template<typename _Iterator, typename _Compare>
-void stable_sort(_Iterator begin, _Iterator end, _Compare comp, MPI_Comm comm = MPI_COMM_WORLD, bool _AssumeBlockDecomp = true)
-{
+void stable_sort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm = mxx::comm(), bool _AssumeBlockDecomp = true) {
     // use stable sample sort
     impl::samplesort<_Iterator, _Compare, true>(begin, end, comp, comm, _AssumeBlockDecomp);
 }
