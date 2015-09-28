@@ -32,6 +32,20 @@
 
 namespace mxx {
 
+template <typename Func>
+inline void comm::with_subset(bool cond, Func f) const {
+    // only split communicator if the condition is not true everywhere
+    // since splitting of communicators is an expensive operation
+    if (!mxx::all_of(cond, *this)) {
+        comm s(std::move(this->split(cond)));
+        if (cond) {
+           f(s);
+        }
+    } else {
+        f(*this);
+    }
+}
+
 inline comm comm::split_shared() const {
         comm o;
 #if MPI_VERSION >= 3

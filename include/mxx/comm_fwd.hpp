@@ -132,6 +132,23 @@ public:
     }
 
     /**
+     * @brief   Executes a given function with only a subset of processes.
+     *
+     * The given function should be of the signature: void(const mxx::comm&)
+     * This communicator is split with the boolean condition.
+     * The given function is called only for those processes for which the
+     * boolean condition was true
+     *
+     * @tparam Func An object/function with operator()(const mxx::comm&).
+     * @param cond  Ranks with `true` are executing the given function in
+     *              a subcommunicator.
+     * @param f     An object/function with operator()(const mxx::comm&), which
+     *              gets called on ranks with `cond == true`.
+     */
+    template <typename Func>
+    void with_subset(bool cond, Func f) const;
+
+    /**
      * @brief   Returns a new communicator which is the reverse of this.
      *
      * @note    This is a collective operation and has to be called by all

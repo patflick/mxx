@@ -463,7 +463,7 @@ inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterato
                 bcast_rank = comm.rank();
         }
         // get rank of processor for bcast
-        int bcast_src = mxx::allreduce(bcast_rank, std::max<int>, comm);
+        int bcast_src = mxx::allreduce(bcast_rank, mxx::max<int>(), comm);
         mxx::datatype<T> dt;
         MPI_Bcast(&result, 1, dt.type(), bcast_src, comm);
         return result;
