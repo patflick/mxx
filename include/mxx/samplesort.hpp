@@ -43,7 +43,6 @@
 #include "distribution.hpp"
 #include "timer.hpp"
 
-#include "prettyprint.hpp"
 
 #define SS_ENABLE_TIMER 0
 #if SS_ENABLE_TIMER
