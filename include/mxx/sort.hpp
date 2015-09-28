@@ -30,6 +30,7 @@
 #ifndef MXX_SORT_HPP
 #define MXX_SORT_HPP
 
+#include "comm_fwd.hpp"
 #include "samplesort.hpp"
 
 namespace mxx {
@@ -53,6 +54,35 @@ bool is_sorted(_Iterator begin, _Iterator end, _Compare comp, MPI_Comm comm = MP
 {
     return impl::is_sorted(begin, end, comp, comm);
 }
+
+// assumes input is sorted, removes duplicates in global range
+template <typename ForwardIt, typename BinaryPredicate>
+ForwardIt unique(ForwardIt begin, ForwardIt end, BinaryPredicate eq, const mxx::comm& comm) {
+    typedef typename std::iterator_traits<ForwardIt>::value_type T;
+    ForwardIt dest = begin;
+    mxx::comm c = comm.split(begin != end);
+    comm.with_subset(begin != end, [&](const mxx::comm& c) {
+        size_t n = std::distance(begin, end);
+
+        // send last item to next processor
+        T last = *(begin + (n-1));
+        T prev = mxx::right_shift(last, c);
+
+        // skip elements which are equal to the last one on the previous processor
+        while (eq(prev, *begin))
+            ++begin;
+        *dest = *begin;
+
+        // remove duplicates
+        while (++begin != end)
+            if (!eq(*dest, *begin))
+                *++dest = *begin;
+        ++dest;
+    });
+    return dest;
+}
+
+#include "comm_def.hpp"
 
 } // namespace mxx
 
