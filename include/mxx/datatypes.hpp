@@ -173,6 +173,41 @@ MXX_DATATYPE_MPI_BUILTIN(long double, MPI_LONG_DOUBLE);
 
 #undef MXX_DATATYPE_MPI_BUILTIN
 
+/*********************************************************************
+ *                 Pair types for MINLOC and MAXLOC                  *
+ *********************************************************************/
+
+template <typename T>
+struct datatype_pair {
+    static MPI_Datatype get_type() {
+        return MPI_DATATYPE_NULL;
+    }
+};
+
+template <typename T>
+class is_builtin_pair_type : public std::false_type {};
+
+#define MXX_DATATYPE_BUILTIN_PAIR(ctype, mpi_type)                          \
+template <> struct datatype_pair<ctype> {                                   \
+    static MPI_Datatype get_type() {                                        \
+        return mpi_type;                                                    \
+    }                                                                       \
+};                                                                          \
+template <> class is_builtin_pair_type<ctype> : public std::true_type {};   \
+
+// integers-integer pairs
+MXX_DATATYPE_BUILTIN_PAIR(short, MPI_SHORT_INT);
+MXX_DATATYPE_BUILTIN_PAIR(int, MPI_2INT);
+MXX_DATATYPE_BUILTIN_PAIR(long, MPI_LONG_INT);
+
+// floats
+MXX_DATATYPE_BUILTIN_PAIR(float, MPI_FLOAT_INT);
+MXX_DATATYPE_BUILTIN_PAIR(double, MPI_DOUBLE_INT);
+MXX_DATATYPE_BUILTIN_PAIR(long double, MPI_LONG_DOUBLE_INT);
+
+
+#undef MXX_DATATYPE_BUILTIN_PAIR
+
 /**
  * @brief   MPI datatype mapping for std::array
  */

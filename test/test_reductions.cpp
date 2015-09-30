@@ -300,5 +300,16 @@ TEST(MxxReduce, GlobalExScan) {
     }
 }
 
+TEST(MxxReduce, MinMaxLoc) {
+    mxx::comm c;
+
+    std::pair<double, int> maxloc = mxx::max_element(3.1*c.rank(), c);
+    ASSERT_EQ(c.size()-1, maxloc.second);
+    ASSERT_EQ(3.1*(c.size()-1), maxloc.first);
+
+    std::pair<int, int> minloc = mxx::min_element(c.rank()+13);
+    ASSERT_EQ(13, minloc.first);
+    ASSERT_EQ(0, minloc.second);
+}
 
 // TODO: test for simple all_of/some_of etc reductions

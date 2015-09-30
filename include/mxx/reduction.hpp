@@ -491,6 +491,48 @@ inline T global_reduce(const std::vector<T>& in, const mxx::comm& comm = mxx::co
     return global_reduce(in.begin(), in.end(), std::plus<T>(), comm);
 }
 
+/*********************************************************************
+ *                       max/min with location                       *
+ *********************************************************************/
+
+template <typename T>
+inline std::pair<T, int> max_element(const T& x, const mxx::comm& comm = mxx::comm()) {
+    if (mxx::is_builtin_pair_type<T>::value) {
+        MPI_Datatype dt = mxx::datatype_pair<T>::get_type();
+        struct {
+            T value;
+            int rank;
+        } in, out;
+        in.value = x;
+        in.rank = comm.rank();
+        MPI_Allreduce(&in, &out, 1, dt, MPI_MAXLOC, comm);
+        return std::make_pair(out.value, out.rank);
+    } else {
+        // use custom operator
+        std::pair<T, int> in = std::make_pair(x, comm.rank());
+        return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first < y.first ? y : x;}, comm);
+    }
+}
+
+template <typename T>
+inline std::pair<T, int> min_element(const T& x, const mxx::comm& comm = mxx::comm()) {
+    if (mxx::is_builtin_pair_type<T>::value) {
+        MPI_Datatype dt = mxx::datatype_pair<T>::get_type();
+        struct {
+            T value;
+            int rank;
+        } in, out;
+        in.value = x;
+        in.rank = comm.rank();
+        MPI_Allreduce(&in, &out, 1, dt, MPI_MINLOC, comm);
+        return std::make_pair(out.value, out.rank);
+    } else {
+        // use custom operator
+        std::pair<T, int> in = std::make_pair(x, comm.rank());
+        return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first > y.first ? y : x;}, comm);
+    }
+}
+
 
 /*********************************************************************
  *                               Scan                                *
