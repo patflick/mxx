@@ -16,18 +16,20 @@
 
 /**
  * @file    algos.hpp
- * @author  Nagakishore Jammula <njammula3@mail.gatech.edu>
  * @author  Patrick Flick <patrick.flick@gmail.com>
+ * @author  Nagakishore Jammula <njammula3@mail.gatech.edu>
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements some common sequential algorithms
  *
  */
 
-#ifndef HPC_ALGOS_H
-#define HPC_ALGOS_H
+#ifndef MXX_ALGOS_H
+#define MXX_ALGOS_H
 
 #include <cstdlib>
-#include <iterator>
+#include <vector>
 
+namespace mxx {
 
 /**
  * @brief  Calculates the inclusive prefix sum of the given input range.
@@ -73,6 +75,7 @@ void excl_prefix_sum(Iterator begin, const Iterator end)
     }
 }
 
+#if 0
 
 /**
  * @brief Returns whether the given input range is in sorted order.
@@ -185,4 +188,87 @@ Iterator balanced_partitioning(Iterator begin, Iterator end, T pivot)
     return le_it;
 }
 
-#endif // HPC_ALGOS_H
+#endif
+
+/*********************************************************************
+ *                       Bucketing algorithms                        *
+ *********************************************************************/
+
+
+/// in place bucketing.  uses an extra vector of same size as msgs.  hops around msgs vector until no movement is possible.
+/// complexity is O(b) * O(n).  scales badly, same as bucketing_copy, but with a factor of 2 for large data.
+/// when fixed n, slight increase with b..  else increases with n.
+template<typename T, typename Func>
+std::vector<size_t> bucketing(std::vector<T>& elements, Func key_func, size_t num_buckets) {
+
+    // number of elements per bucket
+    std::vector<size_t> send_counts(num_buckets, 0);
+
+    // if no elements, return 0 count for each bucket
+    if (elements.size() == 0)
+        return send_counts;
+
+    // for each element, track which bucket it belongs into
+    std::vector<long> membership(elements.size());
+    for (size_t i = 0; i < elements.size(); ++i)
+    {
+        membership[i] = key_func(elements[i]);
+        ++(send_counts[membership[i]]);
+    }
+    // at this point, have target assignment for each data element, and also count for each process bucket.
+
+    // compute the offsets within the buffer
+    std::vector<size_t> offset = send_counts;
+    excl_prefix_sum(offset.begin(), offset.end());
+    std::vector<size_t> maxes = offset;
+
+    for (size_t i = 0; i < num_buckets; ++i) {
+        maxes[i] += send_counts[i];
+    }
+
+
+    //== swap elements around.
+    T val;
+    size_t tar_pos, start_pos;
+
+    long target;
+
+    // while loop will stop under 2 conditions:
+    //      1. returned to starting position (looped), or
+    //      2, tar_pos is the current pos.
+    // either way, we need a new starting point.  instead of searching through buffer O(N), search
+    // for incomplete buckets via offset O(p).
+
+    for (size_t i = 0; i < num_buckets;) {
+        // determine the starting position.
+        if (offset[i] == maxes[i]) {
+            ++i;  // skip all completed buckets
+            continue;  // have the loop check value.
+        }
+        // get the start pos.
+        start_pos = offset[i];
+
+        // set up the variable with the current entry.
+        target = membership[start_pos];
+        if (target > -1) {
+            val = ::std::move(elements[start_pos]);  // value to move
+            membership[start_pos] = -2;                // special value to indicate where we started from.
+
+            while (target > -1) {  // if -1 or -2, then either visited or beginning of chain.
+                tar_pos = offset[target]++;  // compute new position.  earlier offset values for the same pid are should have final values already.
+                target = membership[tar_pos];
+
+                // save the info at tar_pos;
+                ::std::swap(val, elements[tar_pos]);  // put what's in src into buffer at tar_pos, and save what's at buffer[tar_pos]
+                membership[tar_pos] = -1;               // mark as visited.
+
+            }  // else already visited, so done.
+        }
+    }
+
+    return send_counts;
+}
+
+} // namespace mxx
+
+#endif // MXX_ALGOS_H
