@@ -51,7 +51,7 @@ T right_shift(const T& t, const mxx::comm& comm = mxx::comm())
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 13;
 
-    T left_value; // result is the value that lies on the previous processor
+    T left_value = T();
     MPI_Request recv_req;
     // if not last processor
     if (comm.rank() > 0) {
@@ -136,7 +136,7 @@ T left_shift(const T& t, const mxx::comm& comm = mxx::comm()) {
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
 
-    T right_value; // result is the value that lies on the previous processor
+    T right_value = T();
     MPI_Request recv_req;
     // if not last processor
     if (comm.rank() < comm.size()-1) {
