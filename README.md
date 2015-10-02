@@ -1,5 +1,6 @@
 mxx
 ===
+[![Build Status](https://travis-ci.org/patflick/mxx.svg?branch=master)](https://travis-ci.org/patflick/mxx)
 
 `mxx` is a `C++`/`C++11` template library for `MPI`. The main goal of this
 library is to provide two things:
