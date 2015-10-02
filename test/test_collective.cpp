@@ -447,6 +447,7 @@ TEST(MxxColl, AlllgatherGeneral) {
     }
     */
     // test convenience functions
+    std::cout << "[RANK " << c.rank() << "] size: " << c.size() << std::endl;
     std::cout << "[RANK " << c.rank() << "] els: " << els << std::endl;
     all = mxx::allgather(els);
     std::cout << "[RANK " << c.rank() << "] all: " << els << std::endl;
