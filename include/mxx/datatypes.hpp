@@ -453,7 +453,7 @@ public:
             MPI_Datatype _remainder;
             // create two contiguous types for blocks and remainder
             MPI_Type_contiguous(nblocks, _block.type(), &_blocks);
-            MPI_Type_contiguous(rem, _base_type.type(), &_type);
+            MPI_Type_contiguous(rem, _base_type.type(), &_remainder);
 
             // create struct for the concatenation of this type
             MPI_Aint lb, extent;

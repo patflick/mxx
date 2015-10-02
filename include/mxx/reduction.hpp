@@ -36,6 +36,7 @@
 // mxx includes
 #include "datatypes.hpp"
 #include "comm_fwd.hpp"
+#include "shift.hpp"
 
 namespace mxx {
 
@@ -403,6 +404,40 @@ inline T allreduce(const T& x, const mxx::comm& comm = mxx::comm()) {
     return allreduce(x, std::plus<T>(), comm);
 }
 
+/************************
+ *  Boolean reductions  *
+ ************************/
+// useful for testing global conditions, such as termination conditions
+
+inline bool all_of(bool x, const mxx::comm& comm = mxx::comm()) {
+    int i = x ? 1 : 0;
+    int result;
+    MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LAND, comm);
+    return result != 0;
+}
+
+
+inline bool any_of(bool x, const mxx::comm& comm = mxx::comm()) {
+    int i = x ? 1 : 0;
+    int result;
+    MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LOR, comm);
+    return result != 0;
+}
+
+inline bool none_of(bool x, const mxx::comm& comm = mxx::comm()) {
+    int i = x ? 1 : 0;
+    int result;
+    MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LAND, comm);
+    return result == 0;
+}
+
+
+template <typename T>
+inline bool all_same(const T& x, const mxx::comm& comm = mxx::comm()) {
+    T y = mxx::right_shift(x, comm);
+    bool same = comm.rank() == 0 || y == x;
+    return all_of(same, comm);
+}
 
 /*********************************************************************
  *                    Local and Global reductions                    *
@@ -514,6 +549,18 @@ inline std::pair<T, int> max_element(const T& x, const mxx::comm& comm = mxx::co
     }
 }
 
+// vector operation
+template <typename T>
+inline std::vector<std::pair<T, int>> max_element(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    std::vector<std::pair<T, int> > pairin(in.size());
+    MXX_ASSERT(mxx::all_same(in.size(), comm));
+    for (size_t i = 0; i < in.size(); ++i) {
+        pairin[i] = std::make_pair(in[i], comm.rank());
+    }
+    // don't use MPI_MAXLOC, because it requires re-packing of the data into structs
+    return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first < y.first ? y : x;}, comm);
+}
+
 template <typename T>
 inline std::pair<T, int> min_element(const T& x, const mxx::comm& comm = mxx::comm()) {
     if (mxx::is_builtin_pair_type<T>::value) {
@@ -531,6 +578,18 @@ inline std::pair<T, int> min_element(const T& x, const mxx::comm& comm = mxx::co
         std::pair<T, int> in = std::make_pair(x, comm.rank());
         return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first > y.first ? y : x;}, comm);
     }
+}
+
+// vector operation
+template <typename T>
+inline std::vector<std::pair<T, int>> min_element(const std::vector<T>& in, const mxx::comm& comm = mxx::comm()) {
+    std::vector<std::pair<T, int> > pairin(in.size());
+    MXX_ASSERT(mxx::all_same(in.size(), comm));
+    for (size_t i = 0; i < in.size(); ++i) {
+        pairin[i] = std::make_pair(in[i], comm.rank());
+    }
+    // don't use MPI_MAXLOC, because it requires re-packing of the data into structs
+    return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first > y.first ? y : x;}, comm);
 }
 
 
@@ -1003,31 +1062,6 @@ T reverse_scan(const T& x, Func func, const mxx::comm& comm = mxx::comm()) {
  *  Specialized ops  *
  *********************/
 
-/************************
- *  Boolean reductions  *
- ************************/
-// useful for testing global conditions, such as termination conditions
-
-inline bool all_of(bool x, const mxx::comm& comm = mxx::comm()) {
-    int i = x ? 1 : 0;
-    int result;
-    MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LAND, comm);
-    return result != 0;
-}
-
-inline bool any_of(bool x, const mxx::comm& comm = mxx::comm()) {
-    int i = x ? 1 : 0;
-    int result;
-    MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LOR, comm);
-    return result != 0;
-}
-
-inline bool none_of(bool x, const mxx::comm& comm = mxx::comm()) {
-    int i = x ? 1 : 0;
-    int result;
-    MPI_Allreduce(&i, &result, 1, MPI_INT, MPI_LAND, comm);
-    return result == 0;
-}
 
 } // namespace mxx
 

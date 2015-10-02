@@ -1,0 +1,37 @@
+# https://travis-ci.org/patflick/mxx
+
+language: cpp
+
+compiler:
+    - gcc
+    - clang
+
+env:
+    - MPI=mpich3
+    - MPI=mpich2
+    - MPI=openmpi
+
+before_install:
+    - sh ./conf/travis-install-mpi.sh $MPI
+
+install:
+    - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8" CC="gcc-4.8"; fi
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - gcc-4.8
+    - g++-4.8
+    - clang
+
+before_script:
+    - mkdir build
+    - cd build
+    - cmake ../
+
+script:
+    - make
+    - mpiexec -np 1 ./bin/test-all
+    - mpiexec -np 4 ./bin/test-all
+    - mpiexec -np 13 ./bin/test-all
