@@ -28,6 +28,7 @@ addons:
     - clang
 
 before_script:
+    - $CXX --version
     - mkdir build
     - cd build
     - cmake ../
@@ -36,4 +37,5 @@ script:
     - make
     - mpiexec -np 1 ./bin/test-all
     - mpiexec -np 4 ./bin/test-all
-    - mpiexec -np 13 ./bin/test-all
+      #- mpiexec -np 13 ./bin/test-all # fails for openmpi!! MPI_Allgather()
+    - mpiexec -np 8 ./bin/test-all
