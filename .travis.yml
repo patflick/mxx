@@ -51,8 +51,8 @@ before_script:
     - mkdir build
     - cd build
     - if [ "$MPI" = "mpich2" ]; then
-      cmake -DENABLE_COVERAGE=ON ../; fi
-      else cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/bin/mpicxx ../
+      cmake -DENABLE_COVERAGE=ON ../;
+      else cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/bin/mpicxx ../; fi
 
 script:
     - make
