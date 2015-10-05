@@ -1,6 +1,7 @@
 mxx
 ===
 [![Build Status](https://img.shields.io/travis/patflick/mxx.svg)](https://travis-ci.org/patflick/mxx)
+[![Build Status](https://travis-ci.org/patflick/mxx.svg?branch=master)](https://travis-ci.org/patflick/mxx)
 [![Test Coverage](https://img.shields.io/codecov/c/github/patflick/mxx.svg)](http://codecov.io/github/patflick/mxx?branch=master)
 [![Apache 2.0 License](https://img.shields.io/badge/license-Apache%20v2.0-blue.svg)](LICENSE)
 

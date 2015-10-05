@@ -29,7 +29,9 @@ addons:
     - clang
 
 before_script:
+    - echo "== Versions: =="
     - $CXX --version
+    - mpiexec --version
     - mkdir build
     - cd build
     - cmake -DENABLE_COVERAGE=ON ../
