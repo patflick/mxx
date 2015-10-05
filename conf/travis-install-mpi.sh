@@ -9,27 +9,49 @@ os=`uname`
 
 case "$os" in
     Linux)
-        sudo apt-get update -q
+        #sudo apt-get update -q
         case "$MPI_IMPL" in
-            mpich2)
-                sudo apt-get install -q gfortran mpich2 libmpich2-3 libmpich2-dev
+            #mpich2)
+            #    sudo apt-get install -q gfortran mpich2 libmpich2-3 libmpich2-dev
+            #    ;;
+            mpich3)
+                #sudo apt-get install -q gfortran libcr0 default-jdk
+                #wget -q http://www.cebacad.net/files/mpich/ubuntu/mpich-3.1/mpich_3.1-1ubuntu_amd64.deb
+                #sudo dpkg -i ./mpich_3.1-1ubuntu_amd64.deb
+                #rm -f ./mpich_3.1-1ubuntu_amd64.deb
+                if [ ! -d "$HOME/local/bin" ]; then
+                    wget http://www.mpich.org/static/downloads/3.1.4/mpich-3.1.4.tar.gz
+                    tar -xzf mpich-3.1.4.tar.gz
+                    cd mpich-3.1.4
+                    ./configure --prefix=$HOME/local && make && make install
+                    cd ../../
+                else
+                    echo 'Using chached MPICH 3.1.4 directory';
+                fi
                 ;;
-            mpich|mpich3)
-                sudo apt-get install -q gfortran libcr0 default-jdk
-                wget -q http://www.cebacad.net/files/mpich/ubuntu/mpich-3.1/mpich_3.1-1ubuntu_amd64.deb
-                sudo dpkg -i ./mpich_3.1-1ubuntu_amd64.deb
-                rm -f ./mpich_3.1-1ubuntu_amd64.deb
-                ;;
-            openmpi)
-                sudo apt-get install -q gfortran openmpi-bin openmpi-common libopenmpi-dev
+            openmpi16)
+                #sudo apt-get install -q gfortran openmpi-bin openmpi-common libopenmpi-dev
+                if [ ! -d "$HOME/local/bin" ]; then
+                    wget https://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.bz2
+                    tar -xjf openmpi-1.6.5.tar.bz2
+                    cd openmpi-1.6.5
+                    ./configure --prefix=$HOME/local && make && make install
+                    cd ../../
+                else
+                    echo 'Using chached OpenMPI 1.6.5 directory';
+                fi
                 ;;
             openmpi18)
-                mkdir -p openmpi && cd openmpi
-                wget http://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
-                tar -xjf openmpi-1.8.8.tar.bz2
-                cd openmpi-1.8.8
-                ./configure --prefix=$HOME/local && make && make install
-                cd ../..
+                if [ ! -d "$HOME/local/bin" ]; then
+                    mkdir -p openmpi && cd openmpi
+                    wget http://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
+                    tar -xjf openmpi-1.8.8.tar.bz2
+                    cd openmpi-1.8.8
+                    ./configure --prefix=$HOME/local && make && make install
+                    cd ../..
+                else
+                    echo 'Using chached OpenMPI 1.8.8 directory';
+                fi
                 ;;
             *)
                 echo "Unknown MPI implementation: $MPI_IMPL"

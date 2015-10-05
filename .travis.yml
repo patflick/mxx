@@ -2,16 +2,16 @@
 
 language: cpp
 
-sudo: required
+sudo: false
 
 compiler:
     - gcc
     - clang
 
+# TODO: mpich 2, OpenMPI 1.10
 env:
     - MPI=mpich3
-    - MPI=mpich2
-    - MPI=openmpi
+    - MPI=openmpi16
     - MPI=openmpi18
 
 before_install:
@@ -19,8 +19,6 @@ before_install:
     - sh ./conf/travis-install-mpi.sh $MPI
     - pip install --user codecov
 
-install:
-    - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8" CC="gcc-4.8"; fi
 addons:
   apt:
     sources:
@@ -30,7 +28,12 @@ addons:
     - g++-4.8
     - clang
 
+cache:
+  directories:
+    - $HOME/local
+
 before_script:
+    - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8" CC="gcc-4.8"; fi
     - ls -r $HOME/local
     - export PATH=$PATH:$HOME/local/bin
     - export LIBRARY_PATH=$LIBRARY_PATH:$HOME/local/lib
@@ -39,14 +42,16 @@ before_script:
     - mpiexec --version
     - mkdir build
     - cd build
+      #- if [ "$MPI" = "openmpi18" ]; then
     - cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/bin/mpicxx ../
+      #  else cmake -DENABLE_COVERAGE=ON ../; fi
 
 script:
     - make
     - mpiexec -np 1 ./bin/test-all
     - mpiexec -np 4 ./bin/test-all
       #- mpiexec -np 13 ./bin/test-all # fails for openmpi!! MPI_Allgather()
-    - mpiexec -np 8 ./bin/test-all
+    - mpiexec -np 13 ./bin/test-all
 
 after_success:
     - codecov --gcov-exec gcov-4.8
