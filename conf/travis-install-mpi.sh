@@ -30,7 +30,7 @@ case "$os" in
                 cd openmpi-1.8.8
                 ./configure --prefix=$HOME/local && make && make install
                 cd ../..
-
+                ;;
             # TODO: openmpi 1.8 (MPI 3)
             *)
                 echo "Unknown MPI implementation: $MPI_IMPL"
