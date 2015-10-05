@@ -1,7 +1,8 @@
 mxx
 ===
-[![Build Status](https://travis-ci.org/patflick/mxx.svg?branch=master)](https://travis-ci.org/patflick/mxx)
-[![Test Coverage](http://codecov.io/github/patflick/mxx/coverage.svg?branch=master)](http://codecov.io/github/patflick/mxx?branch=master)
+[![Build Status](https://img.shields.io/travis/patflick/mxx.svg)](https://travis-ci.org/patflick/mxx)
+[![Test Coverage](https://img.shields.io/codecov/c/github/patflick/mxx.svg)](http://codecov.io/github/patflick/mxx?branch=master)
+[![Apache 2.0 License](https://img.shields.io/badge/license-Apache%20v2.0-blue.svg)](LICENSE)
 
 `mxx` is a `C++`/`C++11` template library for `MPI`. The main goal of this
 library is to provide two things:
