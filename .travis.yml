@@ -12,6 +12,7 @@ env:
     - MPI=mpich3
     - MPI=mpich2
     - MPI=openmpi
+    - MPI=openmpi18
 
 before_install:
     - sh ./conf/travis-install-mpi.sh $MPI
@@ -29,12 +30,15 @@ addons:
     - clang
 
 before_script:
-    - echo "== Versions: =="
+    - ls -r $HOME/local
+    - export PATH=$PATH:$HOME/local/bin
+    - export LIBRARY_PATH=$LIBRARY_PATH:$HOME/local/lib
+    - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/local/lib
     - $CXX --version
     - mpiexec --version
     - mkdir build
     - cd build
-    - cmake -DENABLE_COVERAGE=ON ../
+    - cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/bin/mpicxx ../
 
 script:
     - make

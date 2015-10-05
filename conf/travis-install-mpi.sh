@@ -23,6 +23,14 @@ case "$os" in
             openmpi)
                 sudo apt-get install -q gfortran openmpi-bin openmpi-common libopenmpi-dev
                 ;;
+            openmpi18)
+                mkdir -p openmpi && cd openmpi
+                wget -q https://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
+                tar -xjf openmpi-1.8.8.tar.bz2
+                cd openmpi-1.8.8
+                ./configure --prefix=$HOME/local && make && make install
+                cd ../..
+
             # TODO: openmpi 1.8 (MPI 3)
             *)
                 echo "Unknown MPI implementation: $MPI_IMPL"
