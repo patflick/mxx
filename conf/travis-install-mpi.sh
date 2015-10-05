@@ -48,7 +48,8 @@ case "$os" in
                     wget http://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
                     tar -xjf openmpi-1.8.8.tar.bz2
                     cd openmpi-1.8.8
-                    ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install cd ../..  else
+                    ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
+                    cd ../../
                     echo 'Using chached OpenMPI 1.8.8 directory';
                 fi
                 ;;
