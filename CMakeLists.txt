@@ -51,6 +51,12 @@ if(DOXYGEN_FOUND)
   )
 endif(DOXYGEN_FOUND)
 
+OPTION(ENABLE_COVERAGE "Enable code coverage reporting" OFF)
+
+if(ENABLE_COVERAGE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
+endif(ENABLE_COVERAGE)
+
 ###### Executable and Libraries
 # Save libs and executables in the same place
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )

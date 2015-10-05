@@ -15,6 +15,7 @@ env:
 
 before_install:
     - sh ./conf/travis-install-mpi.sh $MPI
+    - pip install --user codecov
 
 install:
     - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8" CC="gcc-4.8"; fi
@@ -31,7 +32,7 @@ before_script:
     - $CXX --version
     - mkdir build
     - cd build
-    - cmake ../
+    - cmake -DENABLE_COVERAGE ../
 
 script:
     - make
@@ -39,3 +40,6 @@ script:
     - mpiexec -np 4 ./bin/test-all
       #- mpiexec -np 13 ./bin/test-all # fails for openmpi!! MPI_Allgather()
     - mpiexec -np 8 ./bin/test-all
+
+after_success:
+    - codecov
