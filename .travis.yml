@@ -42,4 +42,4 @@ script:
     - mpiexec -np 8 ./bin/test-all
 
 after_success:
-    - codecov
+    - codecov --gcov-exec gcov-4.8
