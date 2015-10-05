@@ -15,6 +15,7 @@ env:
     - MPI=openmpi18
 
 before_install:
+    - mkdir -p $HOME/local
     - sh ./conf/travis-install-mpi.sh $MPI
     - pip install --user codecov
 
