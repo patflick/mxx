@@ -11,9 +11,10 @@ case "$os" in
     Linux)
         #sudo apt-get update -q
         case "$MPI_IMPL" in
-            #mpich2)
+            mpich2)
+                echo "MPICH2 using Travis packages";
             #    sudo apt-get install -q gfortran mpich2 libmpich2-3 libmpich2-dev
-            #    ;;
+                ;;
             mpich3)
                 #sudo apt-get install -q gfortran libcr0 default-jdk
                 #wget -q http://www.cebacad.net/files/mpich/ubuntu/mpich-3.1/mpich_3.1-1ubuntu_amd64.deb
@@ -23,7 +24,7 @@ case "$os" in
                     wget http://www.mpich.org/static/downloads/3.1.4/mpich-3.1.4.tar.gz
                     tar -xzf mpich-3.1.4.tar.gz
                     cd mpich-3.1.4
-                    ./configure --prefix=$HOME/local && make && make install
+                    ./configure --prefix=$HOME/local --disable-fortran && make && make install
                     cd ../../
                 else
                     echo 'Using chached MPICH 3.1.4 directory';
@@ -32,7 +33,7 @@ case "$os" in
             openmpi16)
                 #sudo apt-get install -q gfortran openmpi-bin openmpi-common libopenmpi-dev
                 if [ ! -d "$HOME/local/bin" ]; then
-                    wget https://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.bz2
+                    wget http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.bz2
                     tar -xjf openmpi-1.6.5.tar.bz2
                     cd openmpi-1.6.5
                     ./configure --prefix=$HOME/local && make && make install

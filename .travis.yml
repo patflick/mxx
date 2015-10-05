@@ -14,6 +14,14 @@ env:
     - MPI=openmpi16
     - MPI=openmpi18
 
+matrix:
+  include:
+    - env: MPI=mpich2
+      addons:
+        apt:
+          packages:
+            - gfortran mpich2 libmpich2-3 libmpich2-dev
+
 before_install:
     - mkdir -p $HOME/local
     - sh ./conf/travis-install-mpi.sh $MPI
@@ -42,9 +50,9 @@ before_script:
     - mpiexec --version
     - mkdir build
     - cd build
-      #- if [ "$MPI" = "openmpi18" ]; then
-    - cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/bin/mpicxx ../
-      #  else cmake -DENABLE_COVERAGE=ON ../; fi
+    - if [ "$MPI" = "mpich2" ]; then
+      cmake -DENABLE_COVERAGE=ON ../; fi
+      else cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/bin/mpicxx ../
 
 script:
     - make
@@ -54,4 +62,5 @@ script:
     - mpiexec -np 13 ./bin/test-all
 
 after_success:
-    - codecov --gcov-exec gcov-4.8
+  # only collect coverage if compiled with gcc
+  - if [ "$CXX = "g++-4.8" ]; then codecov --gcov-exec gcov-4.8; fi
