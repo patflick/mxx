@@ -15,6 +15,12 @@ env:
     - MPI=openmpi16  # MPI 2.2
     - MPI=openmpi18  # MPI 3.0
 
+# clang fails to compile mpich 3.1.4:
+matrix:
+    exclude:
+      - compiler: clang
+        env: MPI=mpich3
+
 before_install:
     - pip install --user codecov
 
@@ -53,9 +59,7 @@ before_script:
     # prepare build mxx
     - mkdir build
     - cd build
-    - if [ "$MPI" = "mpich2" ]; then
-      cmake -DENABLE_COVERAGE=ON ../;
-      else cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../; fi
+    - cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../
 
 script:
     # build mxx and run tests
