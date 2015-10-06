@@ -12,7 +12,15 @@ case "$os" in
         #sudo apt-get update -q
         case "$MPI_IMPL" in
             mpich2)
-                echo "MPICH2 using Travis packages";
+                if [ ! -d "$HOME/local/$MPI_IMPL/bin" ]; then
+                    wget http://www.mpich.org/static/downloads/1.5/mpich2-1.5.tar.gz
+                    tar -xzf mpich2-1.5.tar.gz
+                    cd mpich2-1.5
+                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fortran && make && make install
+                    cd ../../
+                else
+                    echo 'Using cached MPICH2 v 1.5 directory';
+                fi
             #    sudo apt-get install -q gfortran mpich2 libmpich2-3 libmpich2-dev
                 ;;
             mpich3)
@@ -27,7 +35,7 @@ case "$os" in
                     ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fortran && make && make install
                     cd ../../
                 else
-                    echo 'Using chached MPICH 3.1.4 directory';
+                    echo 'Using cached MPICH 3.1.4 directory';
                 fi
                 ;;
             openmpi16)
@@ -39,7 +47,7 @@ case "$os" in
                     ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
                     cd ../../
                 else
-                    echo 'Using chached OpenMPI 1.6.5 directory';
+                    echo 'Using cached OpenMPI 1.6.5 directory';
                 fi
                 ;;
             openmpi18)
@@ -50,7 +58,7 @@ case "$os" in
                     cd openmpi-1.8.8
                     ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
                     cd ../../
-                    echo 'Using chached OpenMPI 1.8.8 directory';
+                    echo 'Using cached OpenMPI 1.8.8 directory';
                 fi
                 ;;
             *)

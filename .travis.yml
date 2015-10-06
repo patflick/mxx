@@ -10,9 +10,10 @@ compiler:
 
 # TODO: mpich 2, OpenMPI 1.10
 env:
-    - MPI=mpich3
-    - MPI=openmpi16
-    - MPI=openmpi18
+    - MPI=mpich2     # MPI 2.2
+    - MPI=mpich3     # MPI 3.0
+    - MPI=openmpi16  # MPI 2.2
+    - MPI=openmpi18  # MPI 3.0
 
 # include mpich2 from repos
 matrix:
