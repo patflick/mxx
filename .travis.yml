@@ -28,6 +28,9 @@ addons:
     - g++-4.8
     - clang-3.7
 
+# TODO: the cache doesn't work like this :(
+#       the upload of the cache overwrites previous cached directories
+#       thus builds are not parallelizable
 cache:
   directories:
     - $HOME/local/$MPI
