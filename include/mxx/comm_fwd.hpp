@@ -279,10 +279,14 @@ public:
     /// pass string literal to comm::send
     template <typename CharT, size_t N>
     inline void send(const CharT(&msg)[N], int dest, int tag = 0) const {
-        MXX_ASSERT(N < mxx::max_int);
         MXX_ASSERT(0 <= dest && dest < this->size());
-        mxx::datatype<CharT> dt;
-        MPI_Send(const_cast<CharT*>(msg), N-1, dt.type(), dest, tag, this->mpi_comm);
+        if (N < mxx::max_int) {
+            mxx::datatype<CharT> dt;
+            MPI_Send(const_cast<CharT*>(msg), N-1, dt.type(), dest, tag, this->mpi_comm);
+        } else {
+            mxx::datatype_contiguous<CharT> dt(N-1);
+            MPI_Send(const_cast<CharT*>(msg), 1, dt.type(), dest, tag, this->mpi_comm);
+        }
     }
 
 
