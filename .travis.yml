@@ -14,6 +14,7 @@ env:
     - MPI=mpich3     # MPI 3.0
     - MPI=openmpi16  # MPI 2.2
     - MPI=openmpi18  # MPI 3.0
+    - MPI=openmpi18 FAKEBIG=1 # fake BigMPI functions
 
 # clang fails to compile mpich 3.1.4:
 matrix:
@@ -34,9 +35,11 @@ addons:
     - g++-4.8
     - clang-3.7
 
-# TODO: the cache doesn't work like this :(
-#       the upload of the cache overwrites previous cached directories
-#       thus builds are not parallelizable
+# caching of the whole `local` directory. Can't cache only the one for this
+# `env`, because otherwise the different instances will overwrite the cache.
+# For the first test-run, the build has to be run sequentially (limit parallel
+# workers to 1) so that the cache can be correctly initialized. Once the cache
+# is build, parallel workers can be re-enabled.
 cache:
   directories:
     - $HOME/local
@@ -59,14 +62,14 @@ before_script:
     # prepare build mxx
     - mkdir build
     - cd build
-    - cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../
+    - if [ -z "$FAKEBIG" ]; then cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../;
+      else cmake -DFAKE_BIG_MPI=ON -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../; fi
 
 script:
     # build mxx and run tests
     - make
     - mpiexec -np 1 ./bin/test-all
     - mpiexec -np 4 ./bin/test-all
-      #- mpiexec -np 13 ./bin/test-all # fails for openmpi!! MPI_Allgather()
     - mpiexec -np 13 ./bin/test-all
 
 after_success:

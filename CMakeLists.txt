@@ -51,11 +51,18 @@ if(DOXYGEN_FOUND)
   )
 endif(DOXYGEN_FOUND)
 
+### Test Coverage
 OPTION(ENABLE_COVERAGE "Enable code coverage reporting" OFF)
-
 if(ENABLE_COVERAGE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
 endif(ENABLE_COVERAGE)
+
+### Fake BIG MPI for testing of BigMPI functions on travis or other small RAM
+### build systems
+OPTION(FAKE_BIG_MPI "Enable a fake bigMPI threshold of 1" OFF)
+if (FAKE_BIG_MPI)
+  add_definitions(-DMXX_MAX_INT=1)
+endif(FAKE_BIG_MPI)
 
 ###### Executable and Libraries
 # Save libs and executables in the same place
