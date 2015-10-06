@@ -33,7 +33,7 @@ addons:
 #       thus builds are not parallelizable
 cache:
   directories:
-    - $HOME/local/$MPI
+    - $HOME/local
 
 before_script:
     # set compiler to newer versions
