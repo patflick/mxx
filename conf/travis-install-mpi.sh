@@ -16,7 +16,7 @@ case "$os" in
                     wget http://www.mpich.org/static/downloads/1.5/mpich2-1.5.tar.gz
                     tar -xzf mpich2-1.5.tar.gz
                     cd mpich2-1.5
-                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fortran && make && make install
+                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fc --disable-f77 && make && make install
                     cd ../../
                 else
                     echo 'Using cached MPICH2 v 1.5 directory';

@@ -15,24 +15,6 @@ env:
     - MPI=openmpi16  # MPI 2.2
     - MPI=openmpi18  # MPI 3.0
 
-# include mpich2 from repos
-matrix:
-  include:
-    - compiler: gcc
-      env: MPI=mpich2
-      addons:
-        apt:
-          sources:
-          - ubuntu-toolchain-r-test
-          packages:
-          - gfortran
-          - mpich2
-          - libmpich2-3
-          - libmpich2-dev
-          - gcc-4.8
-          - g++-4.8
-          - clang
-
 before_install:
     - pip install --user codecov
 
