@@ -26,7 +26,6 @@
 
 #include <vector>
 
-#include "comm.hpp"
 #include "datatypes.hpp"
 #include "shift.hpp" // FIXME: include only `requests`
 

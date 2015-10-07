@@ -752,8 +752,10 @@ void gatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv
  */
 template <typename T>
 std::vector<T> gatherv(const T* data, size_t size, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
+    std::vector<T> result;
     size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
-    std::vector<T> result(total_size);
+    if (comm.rank() == root)
+        result.resize(total_size);
     gatherv(data, size, &result[0], recv_sizes, root, comm);
     return result;
 }

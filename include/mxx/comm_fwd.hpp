@@ -37,6 +37,11 @@ namespace mxx {
 static constexpr int any_tag = MPI_ANY_TAG;
 static constexpr int any_source = MPI_ANY_SOURCE;
 
+
+// forward declaration for streams
+template <typename CharT, class Traits = std::char_traits<CharT> >
+class sync_basic_ostream;
+
 class comm {
 public:
     /// Default constructor defaults to COMM_WORLD
@@ -161,6 +166,13 @@ public:
             this->send(0, this->rank()+1, 345);
         }
     }
+
+    // returns synchronized stream object for this communicator.
+    // The stream object's destructor contains a collective operation
+    // for synchronized cout/cerr output
+    sync_basic_ostream<char> sync_cout() const;
+    sync_basic_ostream<char> sync_cerr() const;
+
 
     /**
      * @brief   Returns a new communicator which is the reverse of this.

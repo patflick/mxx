@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <mxx/sort.hpp>
 #include <mxx/shift.hpp>
+#include <mxx/stream.hpp>
 
 #include <vector>
 #include <iostream>
@@ -113,4 +114,23 @@ TEST(MxxSort, StableSort) {
         return std::get<2>(x) < std::get<2>(y) || (std::get<2>(x) == std::get<2>(y) && std::get<1>(x) < std::get<1>(y));
     };
     ASSERT_TRUE(mxx::is_sorted(vec.begin(), vec.end(), full_cmp, c));
+}
+
+TEST(MxxSort, Unique) {
+    mxx::comm c;
+    std::vector<int> vec(100);
+    std::srand(13*c.rank());
+    int i = 0;
+    std::generate(vec.begin(), vec.end(), [&i](){return i++ % 10;});
+    mxx::sort(vec.begin(), vec.end());
+    std::vector<int>::iterator newend = mxx::unique(vec.begin(), vec.end());
+    std::vector<int> unique_els(vec.begin(), newend);
+
+    mxx::sync_cout(c) << "[Rank " << c.rank() << "]: Found " << unique_els.size() << " unique elements: " << unique_els << std::endl;
+
+    std::vector<int> all = mxx::allgatherv(unique_els);
+    ASSERT_EQ(10ul, all.size());
+    for (size_t i = 0; i < all.size(); ++i) {
+        ASSERT_EQ((int)i, all[i]);
+    }
 }
