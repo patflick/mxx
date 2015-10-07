@@ -148,6 +148,20 @@ public:
     template <typename Func>
     void with_subset(bool cond, Func f) const;
 
+    template <typename Func>
+    void exlusively_in_order_do(Func f) const {
+        // executes f() in the order of ranks
+        if (this->rank() > 0) {
+            this->recv<int>(this->rank()-1, 345);
+        }
+        // call function
+        f();
+        // tell next processor to go ahead
+        if (this->rank() != this->size()-1) {
+            this->send(0, this->rank()+1, 345);
+        }
+    }
+
     /**
      * @brief   Returns a new communicator which is the reverse of this.
      *

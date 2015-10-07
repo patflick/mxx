@@ -417,7 +417,7 @@ TEST(MxxColl, AllgatherOne) {
     }
 }
 
-TEST(MxxColl, AlllgatherGeneral) {
+TEST(MxxColl, AllgatherGeneral) {
     mxx::comm c;
 
     size_t size = 13;
@@ -428,7 +428,6 @@ TEST(MxxColl, AlllgatherGeneral) {
 
     std::vector<unsigned> all;
     all.resize(13*c.size());
-    /*
     // test general function
     mxx::allgather(&els[0], size, &all[0], c);
     for (int i = 0; i < c.size(); ++i) {
@@ -445,12 +444,8 @@ TEST(MxxColl, AlllgatherGeneral) {
             ASSERT_EQ((unsigned)j*3*i, all[i*size + j]);
         }
     }
-    */
     // test convenience functions
-    std::cout << "[RANK " << c.rank() << "] size: " << c.size() << std::endl;
-    std::cout << "[RANK " << c.rank() << "] els: " << els << std::endl;
     all = mxx::allgather(els);
-    std::cout << "[RANK " << c.rank() << "] all: " << all << std::endl;
     ASSERT_EQ(size*c.size(), all.size());
     for (int i = 0; i < c.size(); ++i) {
         for (int j = 0; j < (int)size; ++j) {

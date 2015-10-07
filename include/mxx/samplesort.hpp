@@ -231,82 +231,26 @@ sample_block_decomp(_Iterator begin, _Iterator end, _Compare comp, int s, const 
     return local_splitters;
 }
 
-
-template<typename _Iterator, typename _Compare, bool _Stable = false>
-void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_dt, const mxx::comm& comm, bool _AssumeBlockDecomp = true) {
-    // get value type of underlying data
-    typedef typename std::iterator_traits<_Iterator>::value_type value_type;
-
-    int p = comm.size();
-
-    SS_TIMER_START(comm);
-
-    // perform local (stable) sorting
-    if (_Stable)
-        std::stable_sort(begin, end, comp);
-    else
-        std::sort(begin, end, comp);
-
-    if (p == 1)
-        return;
-
-#if SS_ENABLE_TIMER
-    MPI_Barrier(comm);
-#endif
-    SS_TIMER_END_SECTION("local_sort");
-
-
-    // number of samples
-    int s = p-1;
-    // local size
-    std::size_t local_size = std::distance(begin, end);
-
-#ifndef NDEBUG
-    // Assert the data is actually block decomposed when given that it is
-    std::size_t global_size = mxx::allreduce(local_size, comm);
-    partition::block_decomposition<std::size_t> mypart(global_size, p, comm.rank());
-    assert(!_AssumeBlockDecomp || local_size == mypart.local_size());
-#endif
-    // sample sort
-    // 1. pick `s` samples on each processor
-    // 2. gather to `rank=0`
-    // 3. local sort on master
-    // 4. broadcast the p-1 final splitters
-    // 5. locally find splitter positions in data
-    //    (if an identical splitter appears twice, then split evenly)
-    //    => send_counts
-    // 6. distribute send_counts with all2all to get recv_counts
-    // 7. allocate enough space (may be more than previously allocated) for receiving
-    // 8. all2all
-    // 9. local reordering
-    // A. equalizing distribution into original size (e.g.,block decomposition)
-    //    by elements to neighbors
-
-    // get splitters, using the method depending on whether the input consists
-    // of arbitrary decompositions or not
-    std::vector<value_type> local_splitters;
-    if(_AssumeBlockDecomp)
-        local_splitters = sample_block_decomp(begin, end, comp, s, comm, mpi_dt);
-    else
-        local_splitters = sample_arbit_decomp(begin, end, comp, s, comm, mpi_dt);
-    SS_TIMER_END_SECTION("get_splitters");
-
+template <typename _Iterator, typename _Compare>
+std::vector<size_t> split(_Iterator begin, _Iterator end, _Compare comp, const std::vector<typename std::iterator_traits<_Iterator>::value_type>& splitters, const mxx::comm& comm) {
     // 5. locally find splitter positions in data
     //    (if an identical splitter appears at least three times (or more),
     //    then split the intermediary buckets evenly) => send_counts
-    std::vector<size_t> send_counts(p, 0);
+    MXX_ASSERT(splitters.size() == (size_t)comm.size() - 1);
+    std::vector<size_t> send_counts(comm.size(), 0);
     _Iterator pos = begin;
-    partition::block_decomposition<std::size_t> local_part(local_size, p, comm.rank());
-    for (std::size_t i = 0; i < local_splitters.size();) {
+    size_t local_size = std::distance(begin, end);
+    partition::block_decomposition<std::size_t> local_part(local_size, comm.size(), comm.rank());
+    for (std::size_t i = 0; i < splitters.size();) {
         // get the number of splitters which are equal starting from `i`
         unsigned int split_by = 1;
-        while (i+split_by < local_splitters.size()
-               && !comp(local_splitters[i], local_splitters[i+split_by])) {
+        while (i+split_by < splitters.size()
+               && !comp(splitters[i], splitters[i+split_by])) {
             ++split_by;
         }
 
         // get the range of equal elements
-        std::pair<_Iterator, _Iterator> eqr = std::equal_range(pos, end, local_splitters[i], comp);
+        std::pair<_Iterator, _Iterator> eqr = std::equal_range(pos, end, splitters[i], comp);
 
         // assign smaller elements to processor left of splitter (= `i`)
         send_counts[i] += std::distance(pos, eqr.first);
@@ -334,9 +278,128 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     }
     // send last elements to last processor
     std::size_t out_size = std::distance(pos, end);
-    send_counts[p-1] += out_size;
+    send_counts[comm.size() - 1] += out_size;
     MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), 0ull) == local_size);
+    return send_counts;
+}
 
+template <typename _Iterator, typename _Compare>
+std::vector<size_t> stable_split(_Iterator begin, _Iterator end, _Compare comp, const std::vector<typename std::iterator_traits<_Iterator>::value_type>& splitters, const mxx::comm& comm) {
+    // 5. locally find splitter positions in data
+    //    (if an identical splitter appears at least three times (or more),
+    //    then split the intermediary buckets evenly) => send_counts
+    MXX_ASSERT(splitters.size() == (size_t) comm.size() - 1);
+    std::vector<size_t> send_counts(comm.size(), 0);
+    _Iterator pos = begin;
+    size_t local_size = std::distance(begin, end);
+    partition::block_decomposition<std::size_t> local_part(local_size, comm.size(), comm.rank());
+    for (std::size_t i = 0; i < splitters.size();) {
+        // get the number of splitters which are equal starting from `i`
+        unsigned int split_by = 1;
+        while (i+split_by < splitters.size()
+               && !comp(splitters[i], splitters[i+split_by])) {
+            ++split_by;
+        }
+
+        // get the range of equal elements
+        std::pair<_Iterator, _Iterator> eqr = std::equal_range(pos, end, splitters[i], comp);
+
+        // assign smaller elements to processor left of splitter (= `i`)
+        send_counts[i] += std::distance(pos, eqr.first);
+        pos = eqr.first;
+
+        // split equal elements fairly across processors
+        std::size_t eq_size = std::distance(pos, eqr.second);
+
+        // send equal elements to processor based on my own rank compared to
+        // how many equal splitters there are
+        if (split_by == 1) {
+            // 1) if there is only one splitter, assign equal elements to next processor (no splitting)
+            send_counts[i+1] += eq_size;
+        } else {
+            // 2) if there is >= 2 equal splitters: split processors into `split_by` regions
+            unsigned int targetp = (comm.rank() * split_by) / comm.size();
+            if (targetp >= split_by) targetp = split_by-1;
+            send_counts[i+1+targetp] += eq_size;
+        }
+        i += split_by;
+        pos = eqr.second;
+    }
+
+    // send last elements to last processor
+    std::size_t out_size = std::distance(pos, end);
+    send_counts[comm.size() - 1] += out_size;
+    MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), 0ull) == local_size);
+    return send_counts;
+}
+
+
+template<typename _Iterator, typename _Compare, bool _Stable = false>
+void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_dt, const mxx::comm& comm) {
+    // get value type of underlying data
+    typedef typename std::iterator_traits<_Iterator>::value_type value_type;
+
+    int p = comm.size();
+
+    SS_TIMER_START(comm);
+
+    // perform local (stable) sorting
+    if (_Stable)
+        std::stable_sort(begin, end, comp);
+    else
+        std::sort(begin, end, comp);
+
+    if (p == 1)
+        return;
+
+#if SS_ENABLE_TIMER
+    MPI_Barrier(comm);
+#endif
+    SS_TIMER_END_SECTION("local_sort");
+
+
+    // number of samples
+    int s = p-1;
+    // local size
+    std::size_t local_size = std::distance(begin, end);
+
+    // check if we have a perfect block decomposition
+    std::size_t global_size = mxx::allreduce(local_size, comm);
+    partition::block_decomposition<std::size_t> mypart(global_size, p, comm.rank());
+    bool _AssumeBlockDecomp = mxx::all_of(local_size == mypart.local_size());
+
+    // sample sort
+    // 1. pick `s` samples on each processor
+    // 2. gather to `rank=0`
+    // 3. local sort on master
+    // 4. broadcast the p-1 final splitters
+    // 5. locally find splitter positions in data
+    //    (if an identical splitter appears twice, then split evenly)
+    //    => send_counts
+    // 6. distribute send_counts with all2all to get recv_counts
+    // 7. allocate enough space (may be more than previously allocated) for receiving
+    // 8. all2all
+    // 9. local reordering
+    // A. equalizing distribution into original size (e.g.,block decomposition)
+    //    by elements to neighbors
+
+    // get splitters, using the method depending on whether the input consists
+    // of arbitrary decompositions or not
+    std::vector<value_type> local_splitters;
+    if(_AssumeBlockDecomp)
+        local_splitters = sample_block_decomp(begin, end, comp, s, comm, mpi_dt);
+    else
+        local_splitters = sample_arbit_decomp(begin, end, comp, s, comm, mpi_dt);
+    SS_TIMER_END_SECTION("get_splitters");
+
+    // 5. locally find splitter positions in data
+    //    (if an identical splitter appears at least three times (or more),
+    //    then split the intermediary buckets evenly) => send_counts
+    std::vector<size_t> send_counts;
+    if (_Stable)
+        send_counts = stable_split(begin, end, comp, local_splitters, comm);
+    else
+        send_counts = split(begin, end, comp, local_splitters, comm);
     SS_TIMER_END_SECTION("send_counts");
 
 
@@ -351,58 +414,61 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     // 9. local reordering
     /* multiway-merge (using the implementation in __gnu_parallel) */
 #ifdef MXX_USE_GCC_MULTIWAY_MERGE
-    // prepare the sequence offsets
-    typedef typename std::vector<value_type>::iterator val_it;
-    std::vector<std::pair<val_it, val_it> > seqs(p);
-    std::vector<size_t> recv_displs = mxx::impl::get_displacements(recv_counts);
-    for (int i = 0; i < p; ++i) {
-        seqs[i].first = recv_elements.begin() + recv_displs[i];
-        seqs[i].second = seqs[i].first + recv_counts[i];
-    }
-    val_it start_merge_it = recv_elements.begin();
-
-    std::size_t merge_n = local_size;
-    value_type* merge_buf_begin = &(*begin);
-    std::vector<value_type> merge_buf;
-    // TODO: reasonable values for the buffer?
-    // currently: at least 1/10 th of the size to merge or 1 MiB
-    if (local_size == 0 || local_size < recv_n / 10)
-    {
-        // at least 1MB buffer
-        merge_n = std::max<std::size_t>(recv_n / 10, (1024*1024)/sizeof(value_type));
-        merge_buf.resize(merge_n);
-        merge_buf_begin = &merge_buf[0];
-    }
-    for (; recv_n > 0;)
-    {
-        if (recv_n < merge_n)
-            merge_n = recv_n;
-        // i)   merge at most `local_size` many elements sequentially
-        __gnu_parallel::sequential_tag seq_tag;
-        __gnu_parallel::multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, merge_n, comp, seq_tag);
-
-        // ii)  compact the remaining elements in `recv_elements`
-        for (int i = p-1; i > 0; --i)
-        {
-            seqs[i-1].first = std::copy_backward(seqs[i-1].first, seqs[i-1].second, seqs[i].first);
-            seqs[i-1].second = seqs[i].first;
+    if (!_Stable && local_size > (size_t)p*p) {
+        // prepare the sequence offsets
+        typedef typename std::vector<value_type>::iterator val_it;
+        std::vector<std::pair<val_it, val_it> > seqs(p);
+        std::vector<size_t> recv_displs = mxx::impl::get_displacements(recv_counts);
+        for (int i = 0; i < p; ++i) {
+            seqs[i].first = recv_elements.begin() + recv_displs[i];
+            seqs[i].second = seqs[i].first + recv_counts[i];
         }
-        // iii) copy the output buffer `local_size` elements back into
-        //      `recv_elements`
-        start_merge_it = std::copy(merge_buf_begin, merge_buf_begin + merge_n, start_merge_it);
-        assert(start_merge_it == seqs[0].first);
+        val_it start_merge_it = recv_elements.begin();
 
-        // reduce the number of elements to be merged
-        recv_n -= merge_n;
-    }
-    // clean up
-    merge_buf.clear(); merge_buf.shrink_to_fit();
-#else
-    if (_Stable)
-        std::stable_sort(recv_elements.begin(), recv_elements.end(), comp);
-    else
-        std::sort(recv_elements.begin(), recv_elements.end(), comp);
+        std::size_t merge_n = local_size;
+        value_type* merge_buf_begin = &(*begin);
+        std::vector<value_type> merge_buf;
+        // TODO: reasonable values for the buffer?
+        // currently: at least 1/10 th of the size to merge or 1 MiB
+        if (local_size == 0 || local_size < recv_n / 10)
+        {
+            // at least 1MB buffer
+            merge_n = std::max<std::size_t>(recv_n / 10, (1024*1024)/sizeof(value_type));
+            merge_buf.resize(merge_n);
+            merge_buf_begin = &merge_buf[0];
+        }
+        for (; recv_n > 0;)
+        {
+            if (recv_n < merge_n)
+                merge_n = recv_n;
+            // i)   merge at most `local_size` many elements sequentially
+            __gnu_parallel::sequential_tag seq_tag;
+            __gnu_parallel::multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, merge_n, comp, seq_tag);
+
+            // ii)  compact the remaining elements in `recv_elements`
+            for (int i = p-1; i > 0; --i)
+            {
+                seqs[i-1].first = std::copy_backward(seqs[i-1].first, seqs[i-1].second, seqs[i].first);
+                seqs[i-1].second = seqs[i].first;
+            }
+            // iii) copy the output buffer `local_size` elements back into
+            //      `recv_elements`
+            start_merge_it = std::copy(merge_buf_begin, merge_buf_begin + merge_n, start_merge_it);
+            assert(start_merge_it == seqs[0].first);
+
+            // reduce the number of elements to be merged
+            recv_n -= merge_n;
+        }
+        // clean up
+        merge_buf.clear(); merge_buf.shrink_to_fit();
+    } else
 #endif
+    {
+        if (_Stable)
+            std::stable_sort(recv_elements.begin(), recv_elements.end(), comp);
+        else
+            std::sort(recv_elements.begin(), recv_elements.end(), comp);
+    }
 
 #if SS_ENABLE_TIMER
     MPI_Barrier(comm);
@@ -421,7 +487,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
 }
 
 template<typename _Iterator, typename _Compare, bool _Stable = false>
-void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm, bool _AssumeBlockDecomp = true)
+void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm)
 {
     // get value type of underlying data
     typedef typename std::iterator_traits<_Iterator>::value_type value_type;
@@ -431,7 +497,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& 
     MPI_Datatype mpi_dt = dt.type();
 
     // sort
-    impl::samplesort<_Iterator, _Compare, _Stable>(begin, end, comp, mpi_dt, comm, _AssumeBlockDecomp);
+    impl::samplesort<_Iterator, _Compare, _Stable>(begin, end, comp, mpi_dt, comm);
 }
 
 } // namespace impl
