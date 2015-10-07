@@ -558,7 +558,7 @@ inline std::vector<std::pair<T, int>> max_element(const std::vector<T>& in, cons
         pairin[i] = std::make_pair(in[i], comm.rank());
     }
     // don't use MPI_MAXLOC, because it requires re-packing of the data into structs
-    return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first < y.first ? y : x;}, comm);
+    return mxx::allreduce(pairin, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first < y.first ? y : x;}, comm);
 }
 
 template <typename T>
@@ -589,7 +589,7 @@ inline std::vector<std::pair<T, int>> min_element(const std::vector<T>& in, cons
         pairin[i] = std::make_pair(in[i], comm.rank());
     }
     // don't use MPI_MAXLOC, because it requires re-packing of the data into structs
-    return mxx::allreduce(in, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first > y.first ? y : x;}, comm);
+    return mxx::allreduce(pairin, [](const std::pair<T, int>& x, const std::pair<T, int>& y) { return x.first > y.first ? y : x;}, comm);
 }
 
 
