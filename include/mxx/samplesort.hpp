@@ -22,43 +22,37 @@
 #ifndef MXX_SAMPLESORT_HPP
 #define MXX_SAMPLESORT_HPP
 
-#include <mpi.h>
-
-#include <assert.h>
+#include "comm.hpp"
+#include "partition.hpp"
+#include "datatypes.hpp"
+#include "collective.hpp"
+#include "shift.hpp"
+#include "distribution.hpp"
 
 #include <iterator>
 #include <algorithm>
 #include <vector>
-#include <limits>
 
 #ifdef __GNUC__
 #ifndef __clang__
 // for multiway-merge
-// TODO: impelement own in case it is not GNU C++
+// TODO: implement multiway merging ourselves
 #include <parallel/multiway_merge.h>
 #include <parallel/merge.h>
 #define MXX_USE_GCC_MULTIWAY_MERGE
 #endif
 #endif
 
-#include "partition.hpp"
-#include "datatypes.hpp"
-#include "collective.hpp"
-#include "shift.hpp"
-#include "distribution.hpp"
-#include "timer.hpp"
-
 
 #define SS_ENABLE_TIMER 0
 #if SS_ENABLE_TIMER
+#include "timer.hpp"
 #define SS_TIMER_START(comm) mxx::section_timer timer(std::cerr, comm, 0);
 #define SS_TIMER_END_SECTION(str) timer.end_section(str);
 #else
 #define SS_TIMER_START(comm)
 #define SS_TIMER_END_SECTION(str)
 #endif
-
-#define MEASURE_LOAD_BALANCE 0
 
 namespace mxx {
 namespace impl {
@@ -349,6 +343,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     else
         std::sort(begin, end, comp);
 
+    // sequential case: we're done
     if (p == 1)
         return;
 
@@ -378,10 +373,10 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     //    => send_counts
     // 6. distribute send_counts with all2all to get recv_counts
     // 7. allocate enough space (may be more than previously allocated) for receiving
-    // 8. all2all
-    // 9. local reordering
+    // 8. all2allv
+    // 9. local reordering (multiway-merge or again std::sort)
     // A. equalizing distribution into original size (e.g.,block decomposition)
-    //    by elements to neighbors
+    //    by sending elements to neighbors
 
     // get splitters, using the method depending on whether the input consists
     // of arbitrary decompositions or not

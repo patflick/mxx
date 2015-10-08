@@ -34,7 +34,7 @@ development, prototyping, and deployment.
 -  Google Test based `MPI` unit testing framework
 -  Parallel sorting with similar API than `std::sort` (`mxx::sort`)
 
-### Planned
+### Planned / TODO
 
 - Parallel random number engines (for use with `C++11` standard library distributions)
 - More parallel (standard) algorithms
@@ -44,6 +44,8 @@ development, prototyping, and deployment.
 - Implementing and tuning different sorting algorithms
 - Communicator classes for different topologies
 - `mxx::env` similar to `boost::mpi::env` for wrapping `MPI_Init` and `MPI_Finalize`
+- Increase test coverage:
+![codecov.io](http://codecov.io/github/patflick/mxx/branch.svg?branch=master)
 
 ### Status
 

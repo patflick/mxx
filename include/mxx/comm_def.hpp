@@ -23,6 +23,9 @@
 #include "shift.hpp"
 #include "collective.hpp"
 #include "reduction.hpp"
+#include "stream.hpp"
+
+#ifdef MXX_STREAM_DONE
 #ifdef MXX_SHIFT_DONE
 #ifdef MXX_COLLECTIVE_DONE
 #ifdef MXX_REDUCTION_DONE
@@ -44,6 +47,14 @@ inline void comm::with_subset(bool cond, Func f) const {
     } else {
         f(*this);
     }
+}
+
+inline mxx::sync_ostream comm::sync_cout() const {
+    return mxx::sync_cout(*this);
+}
+
+inline mxx::sync_ostream comm::sync_cerr() const {
+    return mxx::sync_cerr(*this);
 }
 
 inline comm comm::split_shared() const {
@@ -107,6 +118,7 @@ inline comm comm::split_shared() const {
 
 #endif // MXX_COMM_DEF_HPP
 
+#endif
 #endif
 #endif
 #endif

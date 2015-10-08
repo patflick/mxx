@@ -19,8 +19,8 @@
  * @brief   Implements the interface for parallel sorting.
  *
  * TODO:
- * - [ ] fix stable sort
- * - [ ] fix sort on non GCC compilers
+ * - [x] fix stable sort
+ * - [x] fix sort on non GCC compilers
  * - [ ] radix sort
  * - [ ] fix sorting of samples
  * - [ ] implement and try out different parallel sorting algorithms
@@ -41,23 +41,40 @@ void sort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm =
     impl::samplesort<_Iterator, _Compare, false>(begin, end, comp, comm);
 }
 
+template <typename _Iterator>
+void sort(_Iterator begin, _Iterator end, const mxx::comm& comm = mxx::comm()) {
+    typedef std::less<typename std::iterator_traits<_Iterator>::value_type> Cmp;
+    impl::samplesort<_Iterator, Cmp, false>(begin, end, Cmp(), comm);
+}
+
 template<typename _Iterator, typename _Compare>
 void stable_sort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm = mxx::comm()) {
     // use stable sample sort
     impl::samplesort<_Iterator, _Compare, true>(begin, end, comp, comm);
 }
 
+template <typename _Iterator>
+void stable_sort(_Iterator begin, _Iterator end, const mxx::comm& comm = mxx::comm()) {
+    typedef std::less<typename std::iterator_traits<_Iterator>::value_type> Cmp;
+    impl::samplesort<_Iterator, Cmp, true>(begin, end, Cmp(), comm);
+}
+
 template<typename _Iterator, typename _Compare>
-bool is_sorted(_Iterator begin, _Iterator end, _Compare comp, MPI_Comm comm = MPI_COMM_WORLD)
-{
+bool is_sorted(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm = mxx::comm()) {
     return impl::is_sorted(begin, end, comp, comm);
 }
 
+template<typename _Iterator>
+bool is_sorted(_Iterator begin, _Iterator end, const mxx::comm& comm = mxx::comm()) {
+    typedef std::less<typename std::iterator_traits<_Iterator>::value_type> Cmp;
+    return impl::is_sorted(begin, end, Cmp(), comm);
+}
+
 // assumes input is sorted, removes duplicates in global range
-template <typename ForwardIt, typename BinaryPredicate>
-ForwardIt unique(ForwardIt begin, ForwardIt end, BinaryPredicate eq, const mxx::comm& comm) {
-    typedef typename std::iterator_traits<ForwardIt>::value_type T;
-    ForwardIt dest = begin;
+template <typename Iterator, typename BinaryPredicate>
+Iterator unique(Iterator begin, Iterator end, BinaryPredicate eq, const mxx::comm& comm = mxx::comm()) {
+    typedef typename std::iterator_traits<Iterator>::value_type T;
+    Iterator dest = begin;
     mxx::comm c = comm.split(begin != end);
     comm.with_subset(begin != end, [&](const mxx::comm& c) {
         size_t n = std::distance(begin, end);
@@ -67,8 +84,11 @@ ForwardIt unique(ForwardIt begin, ForwardIt end, BinaryPredicate eq, const mxx::
         T prev = mxx::right_shift(last, c);
 
         // skip elements which are equal to the last one on the previous processor
-        while (eq(prev, *begin))
-            ++begin;
+        if (c.rank() > 0)
+            while (begin != end && eq(prev, *begin))
+                ++begin;
+        if (begin == end)
+            return;
         *dest = *begin;
 
         // remove duplicates
@@ -78,6 +98,11 @@ ForwardIt unique(ForwardIt begin, ForwardIt end, BinaryPredicate eq, const mxx::
         ++dest;
     });
     return dest;
+}
+
+template <typename Iterator>
+Iterator unique(Iterator begin, Iterator end, const mxx::comm& comm = mxx::comm()) {
+    return unique(begin, end, std::equal_to<typename std::iterator_traits<Iterator>::value_type>(), comm);
 }
 
 #include "comm_def.hpp"
