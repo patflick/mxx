@@ -95,7 +95,7 @@ public:
         MPI_Comm_dup(mpi_comm, &o.mpi_comm);
         o.init_ranksize();
         o.do_free = true;
-        return std::move(o);
+        return o;
     }
 
     /**
@@ -111,7 +111,7 @@ public:
         MPI_Comm_split(this->mpi_comm, color, this->rank(), &o.mpi_comm);
         o.init_ranksize();
         o.do_free = true;
-        return std::move(o);
+        return o;
     }
 
     /**
@@ -128,7 +128,7 @@ public:
         MPI_Comm_split(this->mpi_comm, color, key, &o.mpi_comm);
         o.init_ranksize();
         o.do_free = true;
-        return std::move(o);
+        return o;
     }
 
     /**
@@ -175,7 +175,7 @@ public:
         MPI_Comm_split(this->mpi_comm, 0, this->size() - this->rank(), &o.mpi_comm);
         o.init_ranksize();
         o.do_free = true;
-        return std::move(o);
+        return o;
     }
 
     /**
@@ -316,7 +316,7 @@ public:
         mxx::datatype<T> dt;
         mxx::future_builder<void> f;
         MPI_Isend(const_cast<T*>(&msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
-        return std::move(f.get_future());
+        return f.get_future();
     }
 
     /// send a block of memory of a specified base datatype
@@ -331,19 +331,19 @@ public:
             mxx::datatype_contiguous<T> dt(size);
             MPI_Isend(const_cast<T*>(msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
         }
-        return std::move(f.get_future());
+        return f.get_future();
     }
 
     /// send a std::vector
     template <typename T>
     inline mxx::future<void> isend(const std::vector<T>& msg, int dest, int tag = 0) const {
-        return std::move(this->isend(&msg[0], msg.size(), dest, tag));
+        return this->isend(&msg[0], msg.size(), dest, tag);
     }
 
     /// Send a std::string
     template <typename CharT, class Traits = std::char_traits<CharT>, class Alloc = std::allocator<CharT> >
     inline mxx::future<void> isend(const std::basic_string<CharT,Traits,Alloc>& msg, int dest, int tag = 0) const {
-        return std::move(this->isend(&msg[0], msg.size(), dest, tag));
+        return this->isend(&msg[0], msg.size(), dest, tag);
     }
 
 
@@ -557,7 +557,7 @@ inline mxx::future<void> comm::irecv_into(T& buffer, int src, int tag) const {
     mxx::future_builder<void> f;
     mxx::datatype<T> dt;
     MPI_Irecv(&buffer, 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
-    return std::move(f.get_future());
+    return f.get_future();
 }
 
 // recv into given buffer of given size
@@ -573,7 +573,7 @@ inline mxx::future<void> comm::irecv_into(T* buffer, size_t count, int src, int 
         mxx::datatype_contiguous<T> dt(count);
         MPI_Irecv(buffer, 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     }
-    return std::move(f.get_future());
+    return f.get_future();
 }
 
 // recv into vector and return
@@ -589,7 +589,7 @@ inline mxx::future<std::vector<T, Alloc> > comm::irecv_vec(size_t size, int src,
         mxx::datatype_contiguous<T> dt(size);
         MPI_Irecv(&(f.data()->front()), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     }
-    return std::move(f.get_future());
+    return f.get_future();
 }
 
 // recv into string and return

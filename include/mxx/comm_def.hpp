@@ -37,7 +37,7 @@ inline void comm::with_subset(bool cond, Func f) const {
     // only split communicator if the condition is not true everywhere
     // since splitting of communicators is an expensive operation
     if (!mxx::all_of(cond, *this)) {
-        comm s(std::move(this->split(cond)));
+        comm s(this->split(cond));
         if (cond) {
            f(s);
         }
@@ -100,7 +100,7 @@ inline comm comm::split_shared() const {
 #endif
         o.init_ranksize();
         o.do_free = true;
-        return std::move(o);
+        return o;
 }
 
 } // namespace mxx
