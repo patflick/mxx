@@ -233,7 +233,9 @@ void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator o
     }
 
     // get prefix sum of size and total size
+#if !defined(NDEBUG) || defined(MEASURE_LOAD_BALANCE)
     size_t total_size = mxx::allreduce(local_size, comm);
+#endif
     size_t prefix = mxx::exscan(local_size, comm);
     if (comm.rank() == 0)
         prefix = 0;

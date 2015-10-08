@@ -139,7 +139,7 @@ template <> class datatype<ctype> {                                         \
 public:                                                                     \
     datatype() {}                                                           \
     MPI_Datatype type() const {return mpi_type;}                            \
-    static constexpr size_t num_basic_elements = 1;                         \
+    static constexpr size_t num_basic_elements() { return 1;}               \
     virtual ~datatype() {}                                                  \
 };                                                                          \
                                                                             \
@@ -227,7 +227,9 @@ public:
     virtual ~datatype() {
         MPI_Type_free(&_type);
     }
-    static constexpr size_t num_basic_elements = size*datatype<T>::num_basic_elements;
+    static constexpr size_t num_basic_elements() {
+        return size*datatype<T>::num_basic_elements();
+    }
 private:
     MPI_Datatype _type;
     datatype<T> _base_type;
@@ -276,7 +278,9 @@ public:
     virtual ~datatype() {
         MPI_Type_free(&_type);
     }
-    static constexpr size_t num_basic_elements = datatype<T1>::num_basic_elements + datatype<T2>::num_basic_elements;
+    static constexpr size_t num_basic_elements() {
+        return datatype<T1>::num_basic_elements() + datatype<T2>::num_basic_elements();
+    }
 private:
     MPI_Datatype _type;
     datatype<T1> _base_type1;
@@ -326,13 +330,13 @@ struct tuple_basic_els;
 template <class T, class...Types>
 struct tuple_basic_els<T,Types...>
 {
-    static constexpr size_t get_num = datatype<T>::num_basic_elements + tuple_basic_els<Types...>::get_num;
+    static constexpr size_t get_num = datatype<T>::num_basic_elements() + tuple_basic_els<Types...>::get_num;
 };
 
 template <class T>
 struct tuple_basic_els<T>
 {
-    static constexpr size_t get_num = datatype<T>::num_basic_elements;
+    static constexpr size_t get_num = datatype<T>::num_basic_elements();
 };
 
 /**
@@ -394,7 +398,9 @@ public:
     virtual ~datatype() {
         MPI_Type_free(&_type);
     }
-    static constexpr size_t num_basic_elements = tuple_basic_els<Types...>::get_num;
+    static constexpr size_t num_basic_elements() {
+        return tuple_basic_els<Types...>::get_num;
+    }
 private:
     MPI_Datatype _type;
     datatypes_tuple_t _base_types;
@@ -424,6 +430,9 @@ public:
     }
     virtual ~datatype_contiguous() {
         MPI_Type_free(&_type);
+    }
+    static constexpr size_t num_basic_elements() {
+        return size*datatype<T>::num_basic_elements();
     }
 private:
     MPI_Datatype _type;
