@@ -22,7 +22,10 @@ target_link_libraries(test-send mpi_gtest)
 add_executable(test-sort test_sort.cpp)
 target_link_libraries(test-sort mpi_gtest)
 
-add_executable(test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp)
+add_executable(test-distribution test_distribution.cpp)
+target_link_libraries(test-distribution mpi_gtest)
+
+add_executable(test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
 target_link_libraries(test-all mpi_gtest)
 
 ################

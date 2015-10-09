@@ -201,6 +201,7 @@ private:
  *
  * @return A vector of the number of elements for each processor.
  */
+/*
 std::vector<int> block_partition(int n, int p)
 {
     // init result
@@ -218,6 +219,7 @@ std::vector<int> block_partition(int n, int p)
     }
     return partition;
 }
+*/
 
 } // namespace mxx
 

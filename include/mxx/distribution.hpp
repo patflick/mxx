@@ -114,7 +114,7 @@ std::vector<T> stable_block_decompose(const std::vector<T>& local_els, const mxx
     return buffer;
 }
 
-std::vector<size_t> surplus_send_pairing(std::vector<long long>& surpluses, int p, int rank, bool send_deficit = true)
+inline std::vector<size_t> surplus_send_pairing(std::vector<long long>& surpluses, int p, int rank, bool send_deficit = true)
 {
     // calculate the send and receive counts by a linear scan over
     // the surpluses, using a queue to keep track of all surpluses
@@ -177,6 +177,7 @@ std::vector<size_t> surplus_send_pairing(std::vector<long long>& surpluses, int 
 
 // non-stable version of the function above
 // this is in-place and resizes the given vector internally!
+// TODO: this is an inconsistent API!
 template <typename T>
 void block_decompose(std::vector<T>& local_els, const mxx::comm& comm) {
     // if single process, don't do anything
@@ -196,7 +197,7 @@ void block_decompose(std::vector<T>& local_els, const mxx::comm& comm) {
 
 #ifndef NDEBUG
     std::size_t send_size = std::accumulate(send_counts.begin(), send_counts.end(), 0);
-    assert(surplus <= 0 || send_size == surplus);
+    assert(surplus <= 0 || send_size == (size_t)surplus);
 #endif
 
     // allocate result
@@ -209,7 +210,7 @@ void block_decompose(std::vector<T>& local_els, const mxx::comm& comm) {
     } else {
         MXX_ASSERT(send_size == 0);
         buffer = mxx::all2allv(&local_els[0], send_counts, comm);
-        MXX_ASSERT(buffer.size() == -surplus);
+        MXX_ASSERT(buffer.size() == (size_t)-surplus);
         if (buffer.size() > 0) {
             local_els.resize(local_size - surplus);
             std::copy(buffer.begin(), buffer.end(), local_els.end() + surplus);

@@ -35,6 +35,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "common.hpp"
 
 namespace mxx
 {
@@ -446,7 +447,7 @@ template <typename T>
 class datatype_contiguous<T,0> {
 public:
     datatype_contiguous(std::size_t size) : _base_type() {
-        if (size <= std::numeric_limits<int>::max())
+        if (size <= mxx::max_int)
         {
             MPI_Type_contiguous(size, _base_type.type(), &_type);
             MPI_Type_commit(&_type);
