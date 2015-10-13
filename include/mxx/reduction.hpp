@@ -916,7 +916,7 @@ inline std::vector<T> local_exscan(const std::vector<T>& in, Func func) {
 }
 
 template <typename T>
-inline void local_exscan(const std::vector<T>& in) {
+inline std::vector<T> local_exscan(const std::vector<T>& in) {
     std::vector<T> result(in.size());
     local_exscan(in.begin(), in.end(), result.begin(), std::plus<T>());
     return result;
