@@ -689,12 +689,12 @@ inline void local_scan_inplace(Iterator begin, Iterator end) {
 
 // std::vector overloads
 template <typename T, typename Func>
-inline void local_scan_inplace(const std::vector<T>& in, Func func) {
+inline void local_scan_inplace(std::vector<T>& in, Func func) {
     local_scan_inplace(in.begin(), in.end(), func);
 }
 
 template <typename T>
-inline void local_scan_inplace(const std::vector<T>& in) {
+inline void local_scan_inplace(std::vector<T>& in) {
     local_scan_inplace(in.begin(), in.end(), std::plus<T>());
 }
 
@@ -706,7 +706,7 @@ inline std::vector<T> local_scan(const std::vector<T>& in, Func func) {
 }
 
 template <typename T>
-inline void local_scan(const std::vector<T>& in) {
+inline std::vector<T> local_scan(const std::vector<T>& in) {
     std::vector<T> result(in.size());
     local_scan(in.begin(), in.end(), result.begin(), std::plus<T>());
     return result;
@@ -899,12 +899,12 @@ inline void local_exscan_inplace(Iterator begin, Iterator end) {
 
 // std::vector overloads
 template <typename T, typename Func>
-inline void local_exscan_inplace(const std::vector<T>& in, Func func) {
+inline void local_exscan_inplace(std::vector<T>& in, Func func) {
     local_exscan_inplace(in.begin(), in.end(), func);
 }
 
 template <typename T>
-inline void local_exscan_inplace(const std::vector<T>& in) {
+inline void local_exscan_inplace(std::vector<T>& in) {
     local_exscan_inplace(in.begin(), in.end(), std::plus<T>());
 }
 
