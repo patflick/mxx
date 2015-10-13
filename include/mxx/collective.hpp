@@ -1361,6 +1361,39 @@ std::vector<T> all2allv(const std::vector<T>& msgs, const std::vector<size_t>& s
     return all2allv(&msgs[0], send_sizes, comm);
 }
 
+// TODO: add tests and documentation
+// inplace (input vec == output vec)
+// TODO: distinguish explicitly between inplace and not
+template <typename T, typename Func>
+void all2all_func(std::vector<T>& msgs, Func target_func, const mxx::comm& comm = mxx::comm()) {
+    // bucket input by their target processor
+    // TODO: in-place bucketing!
+    // TODO: replace with bucketing function, implemented elsewhere
+    std::vector<size_t> send_counts(comm.size(), 0);
+    for (auto it = msgs.begin(); it != msgs.end(); ++it) {
+        MXX_ASSERT(0 <= target_func(*it) && target_func(*it) < comm.size());
+        send_counts[target_func(*it)]++;
+    }
+    std::vector<std::size_t> offset = impl::get_displacements(send_counts);
+    std::vector<T> send_buffer;
+    if (msgs.size() > 0) {
+        send_buffer.resize(msgs.size());
+    }
+    for (auto it = msgs.begin(); it != msgs.end(); ++it) {
+        send_buffer[offset[target_p_fun(*it)]++] = *it;
+    }
+
+    // get receive counts
+    std::vector<size_t> recv_counts = all2all(send_counts, comm);
+
+    // resize messages to fit recv
+    std::size_t recv_size = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
+    msgs.swap(std::vector<T>(recv_size));
+
+    // all2all
+    all2allv(&send_buffer[0], send_counts, &msgs[0], recv_counts, comm);
+    // done, result is returned in vector of input messages
+}
 
 } // namespace mxx
 
