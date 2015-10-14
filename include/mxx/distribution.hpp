@@ -87,7 +87,7 @@ void stable_distribute(_InIterator begin, _InIterator end, _OutIterator out, con
                 send_sizes[i] = part.local_size(i);
             }
             // TODO: scatterv with iterators rather than pointers
-            mxx::scatterv(&(*out), send_sizes, &(*out), root, comm);
+            mxx::scatterv(&(*out), send_sizes, &(*out), part.local_size(), root, comm);
         } else {
             // use scatterv to receive
             size_t recv_size = part.local_size();
