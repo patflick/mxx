@@ -474,7 +474,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     //    by elements to neighbors
     //    and save elements into the original iterator positions
     if (_AssumeBlockDecomp)
-        redo_block_decomposition(recv_elements.begin(), recv_elements.end(), begin, comm);
+        stable_distribute(recv_elements.begin(), recv_elements.end(), begin, comm);
     else
         redo_arbit_decomposition(recv_elements.begin(), recv_elements.end(), begin, local_size, comm);
 

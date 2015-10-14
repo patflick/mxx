@@ -41,7 +41,7 @@ TEST(MxxDistribution, StableBlockDistr) {
         vec[i].second = std::rand();
     }
 
-    std::vector<std::pair<int,int>> eq_distr = mxx::stable_block_decompose(vec, c);
+    std::vector<std::pair<int,int>> eq_distr = mxx::stable_distribute(vec, c);
 
     size_t eq_size = total_size / c.size();
     if ((size_t)c.rank() < total_size % c.size())
@@ -78,7 +78,7 @@ TEST(MxxDistribution, BlockDistr) {
     size_t eq_prefix = mxx::exscan(eq_size, c);
 
     // equally distribute
-    mxx::block_decompose(vec, c);
+    mxx::distribute_inplace(vec, c);
 
     ASSERT_TRUE(mxx::all_of(eq_size == vec.size()));
 
@@ -90,3 +90,5 @@ TEST(MxxDistribution, BlockDistr) {
         ASSERT_EQ(eq_prefix+i,(size_t)vec[i]);
     }
 }
+
+// TODO: add more tests
