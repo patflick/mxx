@@ -3,30 +3,23 @@ cmake_minimum_required(VERSION 2.6)
 # project settings
 project(mxx-test)
 
-######################
-#  MPI Google Test:  #
-######################
-
-add_library(mpi_gtest mpi_gtest.cpp ../ext/gtest/gtest-all.cc)
-target_link_libraries(mpi_gtest ${EXTRA_LIBS} pthread)
-
 add_executable(test-collective test_collective.cpp)
-target_link_libraries(test-collective mpi_gtest)
+target_link_libraries(test-collective mpi-gtest-main)
 
 add_executable(test-reductions test_reductions.cpp)
-target_link_libraries(test-reductions mpi_gtest)
+target_link_libraries(test-reductions mpi-gtest-main)
 
 add_executable(test-send test_send.cpp)
-target_link_libraries(test-send mpi_gtest)
+target_link_libraries(test-send mpi-gtest-main)
 
 add_executable(test-sort test_sort.cpp)
-target_link_libraries(test-sort mpi_gtest)
+target_link_libraries(test-sort mpi-gtest-main)
 
 add_executable(test-distribution test_distribution.cpp)
-target_link_libraries(test-distribution mpi_gtest)
+target_link_libraries(test-distribution mpi-gtest-main)
 
 add_executable(test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
-target_link_libraries(test-all mpi_gtest)
+target_link_libraries(test-all mpi-gtest-main)
 
 ################
 #  Old tests:  #

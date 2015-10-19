@@ -32,7 +32,6 @@ if (MPI_FOUND)
     #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_COMPILE_FLAGS}")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_COMPILE_FLAGS}")
     #set(CMAKE_LINK_FLAGS "${CMAKE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
-    set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
     include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 else (MPI_FOUND)
     message(SEND_ERROR "This application cannot compile without MPI")
@@ -70,7 +69,7 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output director
 
 include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_SOURCE_DIR}/ext")
-include_directories("${PROJECT_SOURCE_DIR}/ext/cxx-prettyprint")
 
 # build tests
+add_subdirectory(gtest)
 add_subdirectory(test)

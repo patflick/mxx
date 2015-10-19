@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-/**
- * @file    mpi_gtest.cpp
- * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   MPI enabled Google Test framework. Process 0 will collect
- *          the results (and failures) of all tests and output it.
- */
-#include <mpi.h>
-#include <gtest/gtest.h>
-#include <iostream>
 
-namespace mpi_gtest
+#ifndef MXX_GTEST_EVENTLISTENER
+#define MXX_GTEST_EVENTLISTENER
+
+#include <mpi.h>
+#include "google-test/gtest.h"
+
+namespace mxx_gtest
 {
 using namespace ::testing;
 
@@ -201,36 +198,6 @@ class MpiTestEventListener : public TestEventListener {
     }
 };
 
-}
+} // namespace mxx_gtest
 
-int main(int argc, char* argv[]) {
-    int result = 0;
-
-    ::testing::InitGoogleTest(&argc, argv);
-    MPI_Init(&argc, &argv);
-
-    // get processor rank
-    int rank, p;
-    MPI_Comm_size(MPI_COMM_WORLD, &p);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    if (rank == 0)
-      std::cout << "Running GTEST with MPI using " << p << " processes." << std::endl;
-
-    // set up wrapped test listener
-    ::testing::TestEventListeners& listeners =
-      ::testing::UnitTest::GetInstance()->listeners();
-    ::testing::TestEventListener* default_listener =  listeners.Release(listeners.default_result_printer());
-    listeners.Append(new mpi_gtest::MpiTestEventListener(rank, default_listener));
-
-    // running tests
-    result = RUN_ALL_TESTS();
-    if (rank != 0)
-      result = 0;
-
-    // clean up MPI
-    MPI_Finalize();
-
-    // return good status no matter what
-    return result;
-}
+#endif // MXX_GTEST_EVENTLISTENER
