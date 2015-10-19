@@ -52,6 +52,34 @@ namespace mxx
  * - [ ] surplus-send-pairing without allgather!
  */
 
+namespace impl {
+template<typename _InIterator, typename _OutIterator>
+    void distribute_scatter(_InIterator begin, _InIterator end, _OutIterator out, size_t total_size, const mxx::comm& comm) {
+        size_t local_size = std::distance(begin, end);
+        // get root
+        std::pair<size_t, int> max_pos = mxx::max_element(local_size, comm);
+        int root = max_pos.second;
+        MXX_ASSERT(mxx::all_same(root, comm));
+        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
+
+
+        if (comm.rank() == root) {
+            MXX_ASSERT(local_size == total_size);
+            // use scatterv to send
+            std::vector<size_t> send_sizes(comm.size());
+            for (int i = 0; i < comm.size(); ++i) {
+                send_sizes[i] = part.local_size(i);
+            }
+            // TODO: scatterv with iterators rather than pointers
+            mxx::scatterv(&(*begin), send_sizes, &(*out), part.local_size(), root, comm);
+        } else {
+            // use scatterv to receive
+            size_t recv_size = part.local_size();
+            mxx::scatterv_recv(&(*out), recv_size, root, comm);
+        }
+    }
+}
+
 /**
  * @brief Fixes an unequal distribution into a block decomposition
  */
@@ -73,26 +101,7 @@ void stable_distribute(_InIterator begin, _InIterator end, _OutIterator out, con
 
     // one process has all elements -> use scatter instead of all2all
     if (mxx::any_of(local_size == total_size, comm)) {
-        // get root
-        std::pair<size_t, int> max_pos = mxx::max_element(local_size, comm);
-        int root = max_pos.second;
-        MXX_ASSERT(mxx::all_same(root, comm));
-
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
-
-        if (comm.rank() == root) {
-            // use scatterv to send
-            std::vector<size_t> send_sizes(comm.size());
-            for (int i = 0; i < comm.size(); ++i) {
-                send_sizes[i] = part.local_size(i);
-            }
-            // TODO: scatterv with iterators rather than pointers
-            mxx::scatterv(&(*out), send_sizes, &(*out), part.local_size(), root, comm);
-        } else {
-            // use scatterv to receive
-            size_t recv_size = part.local_size();
-            mxx::scatterv_recv(&(*out), recv_size, root, comm);
-        }
+        impl::distribute_scatter(begin, end, out, total_size, comm);
     } else {
         // get prefix sum of size and total size
         std::size_t prefix = mxx::exscan(local_size, comm);
@@ -191,10 +200,11 @@ void distribute(_InIterator begin, _InIterator end, _OutIterator out, const mxx:
     // get sizes
     size_t local_size = std::distance(begin, end);
     size_t total_size = mxx::allreduce(local_size, comm);
+    typedef typename std::iterator_traits<_InIterator>::value_type T;
 
     if (mxx::any_of(local_size == total_size, comm)) {
         // use scatterv instead of all2all based communication
-        // TODO: use shared implementation
+        impl::distribute_scatter(begin, end, out, total_size, comm);
     } else {
         // use surplus send-pairing to minimize total communication volume
         // TODO: use all2all or send/recv depending on the maximum number of
@@ -216,11 +226,11 @@ void distribute(_InIterator begin, _InIterator end, _OutIterator out, const mxx:
         if (surplus > 0) {
             MXX_ASSERT(std::accumulate(recv_counts.begin(), recv_counts.end(), (size_t)0) == 0);
             // TODO: use iterators not pointers
-            mxx::all2allv(&(*(begin+((impl::signed_size_t)local_size-surplus))), send_counts, nullptr, recv_counts, comm);
+            mxx::all2allv(&(*(begin+((impl::signed_size_t)local_size-surplus))), send_counts, (T*)nullptr, recv_counts, comm);
             std::copy(begin, begin+(local_size-surplus), out);
         } else {
             MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), (size_t)0) == 0);
-            mxx::all2allv(nullptr, send_counts, &(*(out+local_size)), recv_counts, comm);
+            mxx::all2allv((const T*)nullptr, send_counts, &(*(out+local_size)), recv_counts, comm);
             std::copy(begin, end, out);
         }
     }
@@ -239,7 +249,7 @@ struct distribute_container {
         result.resize(part.local_size());
 
         // call the iterator based implementation
-        ::mxx::stable_distribute(std::begin(c), std::end(c), std::begin(result), comm);
+        ::mxx::stable_distribute(c.begin(), c.end(), result.begin(), comm);
 
         // return the container
         return result;
@@ -278,17 +288,20 @@ struct distribute_container {
         // get sizes
         size_t local_size = c.size();
         size_t total_size = mxx::allreduce(local_size, comm);
+        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
 
         if (mxx::any_of(local_size == total_size, comm)) {
             // use scatterv instead of all2all based communication
-            // TODO: use shared implementation
+            Container result;
+            result.resize(part.local_size());
+            impl::distribute_scatter(std::begin(c), std::end(c), std::begin(result), total_size, comm);
+            c.swap(result);
         } else {
             // use surplus send-pairing to minimize total communication volume
             // TODO: use all2all or send/recv depending on the maximum number of
             //       paired processes
 
             // get surplus
-            partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
             impl::signed_size_t surplus = (impl::signed_size_t)local_size - (impl::signed_size_t)part.local_size();
 
             // allgather surpluses
