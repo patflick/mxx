@@ -193,9 +193,11 @@ inline std::vector<size_t> surplus_send_pairing(std::vector<signed_size_t>& surp
 // non-stable version of `stable_distribute`
 template<typename _InIterator, typename _OutIterator>
 void distribute(_InIterator begin, _InIterator end, _OutIterator out, const mxx::comm& comm) {
-    // if single process, don't do anything
-    if (comm.size() == 1)
+    // if single process, copy input to output
+    if (comm.size() == 1) {
+        std::copy(begin, end, out);
         return;
+    }
 
     // get sizes
     size_t local_size = std::distance(begin, end);
@@ -240,6 +242,8 @@ namespace impl {
 template <class Container>
 struct distribute_container {
     inline static Container stable_distribute(const Container& c, const mxx::comm& comm) {
+        if (comm.size() == 1)
+            return c;
         Container result;
         size_t local_size = c.size();
         // TODO: this allreduce is duplicated in the `stable_distribute` function
@@ -262,6 +266,8 @@ struct distribute_container {
     }
 
     inline static Container distribute(const Container& c, const mxx::comm& comm) {
+        if (comm.size() == 1)
+            return c;
         Container result;
         size_t local_size = c.size();
         // TODO: this allreduce is duplicated in the `distribute` function

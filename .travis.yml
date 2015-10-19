@@ -68,7 +68,7 @@ before_script:
 script:
     # build mxx and run tests
     - make
-    - mpiexec -np 1 ./bin/test-all
+    - ./bin/test-all # run without mpi (= -np 1)
     - mpiexec -np 4 ./bin/test-all
     - mpiexec -np 13 ./bin/test-all
 
