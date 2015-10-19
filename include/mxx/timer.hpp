@@ -117,11 +117,24 @@ public:
     }
 };
 
+class empty_section_timer_impl {
+    public:
+    empty_section_timer_impl(std::ostream& = std::cerr, MPI_Comm = MPI_COMM_WORLD, int = 0) {
+    }
+
+    inline void end_section(const std::string&) {
+    }
+};
+
 template <typename duration>
 int section_timer_impl<duration>::depth = 0;
 
 /// mxx::section_timer: specialization for measuring milliseconds in double precision
+#ifdef MXX_DISABLE_TIMER
+using section_timer = empty_section_timer_impl;
+#else
 using section_timer = section_timer_impl<std::chrono::duration<double, std::milli> >;
+#endif
 
 } // namespace mxx
 
