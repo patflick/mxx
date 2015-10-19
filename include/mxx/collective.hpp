@@ -1380,7 +1380,7 @@ void all2all_func(std::vector<T>& msgs, Func target_func, const mxx::comm& comm 
         send_buffer.resize(msgs.size());
     }
     for (auto it = msgs.begin(); it != msgs.end(); ++it) {
-        send_buffer[offset[target_p_fun(*it)]++] = *it;
+        send_buffer[offset[target_func(*it)]++] = *it;
     }
 
     // get receive counts
@@ -1388,7 +1388,9 @@ void all2all_func(std::vector<T>& msgs, Func target_func, const mxx::comm& comm 
 
     // resize messages to fit recv
     std::size_t recv_size = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
-    msgs.swap(std::vector<T>(recv_size));
+    msgs.clear();
+    msgs.shrink_to_fit();
+    msgs.resize(recv_size);
 
     // all2all
     all2allv(&send_buffer[0], send_counts, &msgs[0], recv_counts, comm);
