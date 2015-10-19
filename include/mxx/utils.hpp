@@ -70,7 +70,8 @@ void print_node_distribution(MPI_Comm comm = MPI_COMM_WORLD)
     p_name[p_len] = '\0'; // make string NULL-terminated (if not yet so)
 
     // gather all processor names to master
-    std::vector<char> all_names_raw = gather_range(p_name,p_name+p_len+1,comm);
+    // TODO: use gather with string specialization!
+    std::vector<char> all_names_raw = gatherv(p_name,p_len+1, 0,comm);
 
     if (rank == 0)
     {

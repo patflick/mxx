@@ -24,12 +24,16 @@
 #include <gtest/gtest.h>
 
 #include <mxx/collective.hpp>
+#include <mxx/utils.hpp>
 #include <cxx-prettyprint/prettyprint.hpp>
 
 
 // scatter of size 1
 TEST(MxxColl, ScatterOne) {
     mxx::comm c = MPI_COMM_WORLD;
+
+    // print node distrbution
+    mxx::print_node_distribution(c);
 
     std::vector<int> vec;
     int my;
