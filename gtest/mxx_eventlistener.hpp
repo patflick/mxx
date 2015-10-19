@@ -19,7 +19,7 @@
 #define MXX_GTEST_EVENTLISTENER
 
 #include <mpi.h>
-#include "google-test/gtest.h"
+#include <gtest/gtest.h>
 
 namespace mxx_gtest
 {

@@ -8,5 +8,7 @@ project(mxx-gtest)
 #  MPI Google Test:  #
 ######################
 
-add_library(mxx-gtest-main mpi_gtest.cpp ../ext/gtest/gtest-all.cc)
+include_directories("${PROJECT_SOURCE_DIR}/../")
+
+add_library(mxx-gtest-main mxx_gtest_main.cpp gtest-all.cc)
 target_link_libraries(mxx-gtest-main ${MPI_LIBRARIES} pthread)

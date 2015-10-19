@@ -21,7 +21,7 @@
  *          the results (and failures) of all tests and output it.
  */
 #include <mpi.h>
-#include "google-test/gtest.h"
+#include <gtest/gtest.h>
 #include "mxx_eventlistener.hpp"
 #include <iostream>
 
@@ -41,8 +41,7 @@ int main(int argc, char* argv[]) {
       std::cout << "Running GTEST with MPI using " << p << " processes." << std::endl;
 
     // set up wrapped test listener
-    ::testing::TestEventListeners& listeners =
-      ::testing::UnitTest::GetInstance()->listeners();
+    ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
     ::testing::TestEventListener* default_listener =  listeners.Release(listeners.default_result_printer());
     listeners.Append(new mxx_gtest::MpiTestEventListener(rank, default_listener));
 

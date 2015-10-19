@@ -69,6 +69,7 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output director
 
 include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_SOURCE_DIR}/ext")
+include_directories("${PROJECT_SOURCE_DIR}")
 
 # build tests
 add_subdirectory(gtest)
