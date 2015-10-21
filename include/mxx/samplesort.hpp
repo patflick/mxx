@@ -361,7 +361,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
     // check if we have a perfect block decomposition
     std::size_t global_size = mxx::allreduce(local_size, comm);
     partition::block_decomposition<std::size_t> mypart(global_size, p, comm.rank());
-    bool _AssumeBlockDecomp = mxx::all_of(local_size == mypart.local_size());
+    bool _AssumeBlockDecomp = mxx::all_of(local_size == mypart.local_size(), comm);
 
     // sample sort
     // 1. pick `s` samples on each processor
