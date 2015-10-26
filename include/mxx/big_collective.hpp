@@ -77,7 +77,7 @@ std::vector<index_t> get_displacements(const std::vector<index_t>& counts)
 template <typename T>
 void scatter_big(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm = mxx::comm())
 {
-    mxx::datatype_contiguous<T> dt(size);
+    mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
     MPI_Scatter(const_cast<T*>(msgs), 1, dt.type(), out, 1, dt.type(), root, comm);
 }
 
@@ -104,7 +104,7 @@ void scatterv_big(const T* msgs, const std::vector<size_t>& sizes, T* out, size_
     if (comm.rank() == root) {
         std::size_t offset = 0;
         for (int i = 0; i < comm.size(); ++i) {
-            mxx::datatype_contiguous<T> dt(sizes[i]);
+            mxx::datatype dt = mxx::get_datatype<T>().contiguous(sizes[i]);
             if (i == root) {
                 // copy input into output
                 std::copy(msgs+offset, msgs+offset+sizes[i], out);
@@ -115,7 +115,7 @@ void scatterv_big(const T* msgs, const std::vector<size_t>& sizes, T* out, size_
         }
     } else {
         // create custom datatype to encapsulate the whole message
-        mxx::datatype_contiguous<T> dt(recv_size);
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(recv_size);
         MPI_Irecv(const_cast<T*>(out), 1, dt.type(), root, tag, comm, &reqs.add());
     }
     reqs.wait();
@@ -141,7 +141,7 @@ void scatterv_big(const T* msgs, const std::vector<size_t>& sizes, T* out, size_
 template <typename T>
 void gather_big(const T* data, size_t size, T* out, int root, const mxx::comm& comm) {
     // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::datatype_contiguous<T> dt(size);
+    mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
     MPI_Gather(const_cast<T*>(data), 1, dt.type(), out, 1, dt.type(), root, comm);
 }
 
@@ -172,7 +172,7 @@ void gatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& 
     if (comm.rank() == root) {
         size_t offset = 0;
         for (int i = 0; i < comm.size(); ++i) {
-            mxx::datatype_contiguous<T> dt(recv_sizes[i]);
+            mxx::datatype dt = mxx::get_datatype<T>().contiguous(recv_sizes[i]);
             if (i == root) {
                 // copy input into output
                 std::copy(data, data+size, out+offset);
@@ -183,7 +183,7 @@ void gatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& 
         }
     } else {
         // create custom datatype to encapsulate the whole message
-        mxx::datatype_contiguous<T> dt(size);
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
         MPI_Isend(const_cast<T*>(data), 1, dt.type(), root, tag, comm, &reqs.add());
     }
     reqs.wait();
@@ -207,7 +207,7 @@ void gatherv_big(const T* data, size_t size, T* out, const std::vector<size_t>& 
 template <typename T>
 void allgather_big(const T* data, size_t size, T* out, const mxx::comm& comm) {
     // implementation of scatter for messages sizes that exceed MAX_INT
-    mxx::datatype_contiguous<T> dt(size);
+    mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
     MPI_Allgather(const_cast<T*>(data), 1, dt.type(), out, 1, dt.type(), comm);
 }
 
@@ -225,10 +225,10 @@ void allgatherv_big(const T* data, size_t size, T* out, const std::vector<size_t
     size_t offset = 0;
     for (int i = 0; i < comm.size(); ++i) {
         // send to this rank
-        mxx::datatype_contiguous<T> senddt(size);
+        mxx::datatype senddt = mxx::get_datatype<T>().contiguous(size);
         MPI_Isend(const_cast<T*>(data), 1, senddt.type(), i, tag, comm, &reqs.add());
         // receive from this rank
-        mxx::datatype_contiguous<T> dt(recv_sizes[i]);
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(recv_sizes[i]);
         MPI_Irecv(const_cast<T*>(out)+offset, 1, dt.type(), i, tag, comm, &reqs.add());
         offset += recv_sizes[i];
     }
@@ -248,8 +248,8 @@ void allgatherv_big(const T* data, size_t size, T* out, const std::vector<size_t
  */
 template <typename T>
 void all2all_big(const T* msgs, size_t size, T* out, const mxx::comm& comm = mxx::comm()) {
-    datatype_contiguous<T> bigtype(size);
-    MPI_Alltoall(const_cast<T*>(msgs), 1, bigtype.type(), out, 1, bigtype.type(), comm);
+    mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
+    MPI_Alltoall(const_cast<T*>(msgs), 1, dt.type(), out, 1, dt.type(), comm);
 }
 
 /**
@@ -283,15 +283,15 @@ void all2allv_big(const T* msgs, const std::vector<size_t>& send_sizes, T* out, 
     for (int i = 0; i < comm.size(); ++i) {
         // start with self send/recv
         int recv_from = (comm.rank() + (comm.size()-i)) % comm.size();
-        datatype_contiguous<T> bigtype(recv_sizes[recv_from]);
-        MPI_Irecv(const_cast<T*>(&(*out)) + recv_displs[recv_from], 1, bigtype.type(),
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(recv_sizes[recv_from]);
+        MPI_Irecv(const_cast<T*>(&(*out)) + recv_displs[recv_from], 1, dt.type(),
                   recv_from, tag, comm, &reqs.add());
     }
     // dispatch sends
     for (int i = 0; i < comm.size(); ++i) {
         int send_to = (comm.rank() + i) % comm.size();
-        datatype_contiguous<T> bigtype(send_sizes[send_to]);
-        MPI_Isend(const_cast<T*>(msgs)+send_displs[send_to], 1, bigtype.type(), send_to,
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(send_sizes[send_to]);
+        MPI_Isend(const_cast<T*>(msgs)+send_displs[send_to], 1, dt.type(), send_to,
                   tag, comm, &reqs.add());
     }
 

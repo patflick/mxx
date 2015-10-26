@@ -70,20 +70,31 @@ namespace mxx
 // - [ ] (see wrappers in official MPI C++ bindings)
 
 template <typename T>
-class datatype {};
-
-template <typename T>
 class is_builtin_type : public std::false_type {};
 
+class datatype;
 
-// TODO: use this as a base class for datatypes?
-class datatype_base {
+template <typename T>
+datatype get_datatype();
+
+template <typename T>
+datatype get_datatype(const T&);
+
+// MPI_Datatype wrapper
+class datatype {
+protected:
+    datatype(MPI_Datatype mpidt, bool builtin) : mpitype(mpidt), builtin(builtin) {
+    }
+    template <typename T>
+    friend datatype get_datatype();
+    template <typename T>
+    friend datatype get_datatype(const T&);
 public:
-    datatype_base() : mpitype(MPI_DATATYPE_NULL), builtin(true) {
+    datatype() : mpitype(MPI_DATATYPE_NULL), builtin(true) {
     }
 
     // copy constructor
-    datatype_base(const datatype_base& o) {
+    datatype(const datatype& o) {
         builtin = o.builtin;
         if (builtin) {
             mpitype = o.mpitype;
@@ -94,7 +105,7 @@ public:
     }
 
     // move constructor
-    datatype_base(datatype_base&& o) {
+    datatype(datatype&& o) {
         builtin = o.builtin;
         mpitype = o.mpitype;
         o.mpitype = MPI_DATATYPE_NULL;
@@ -102,7 +113,7 @@ public:
     }
 
     // copy assignment
-    datatype_base& operator=(const datatype_base& o) {
+    datatype& operator=(const datatype& o) {
         builtin = o.builtin;
         if (builtin) {
             mpitype = o.mpitype;
@@ -114,7 +125,7 @@ public:
     }
 
     // move assignment
-    datatype_base& operator=(datatype_base&& o) {
+    datatype& operator=(datatype&& o) {
         builtin = o.builtin;
         mpitype = o.mpitype;
         o.mpitype = MPI_DATATYPE_NULL;
@@ -122,7 +133,64 @@ public:
         return *this;
     }
 
-    virtual ~datatype_base() {
+    MPI_Datatype type() const {
+        return mpitype;
+    }
+
+    datatype vector(size_t count, size_t blocklen, size_t stride) const {
+        // TODO what if any of the parameters > MAX_INT? -> use Type_create_struct instead!
+        //  -> if blocklen >= MAX_INT then use contiguous first, then struct with count elements
+        datatype result;
+        result.builtin = false;
+        MPI_Type_vector(count, blocklen, stride, this->mpitype, &result.mpitype);
+        return result;
+    }
+
+    datatype contiguous(size_t count) const {
+        datatype result;
+        result.builtin = false;
+        if (count <= mxx::max_int) {
+            MPI_Type_contiguous(count, this->mpitype, &result.mpitype);
+            MPI_Type_commit(&result.mpitype);
+        } else {
+            // create custom data types of blocks and remainder
+            std::size_t intmax = mxx::max_int;
+            std::size_t nblocks = count / intmax;
+            std::size_t rem = count % intmax;
+
+            // create block and remainder data types
+            MPI_Datatype _block;
+            MPI_Type_contiguous(mxx::max_int, this->mpitype, &_block);
+            MPI_Datatype _blocks;
+            MPI_Datatype _remainder;
+            // create two contiguous types for blocks and remainder
+            MPI_Type_contiguous(nblocks, _block, &_blocks);
+            MPI_Type_contiguous(rem, this->mpitype, &_remainder);
+
+            // create struct for the concatenation of this type
+            MPI_Aint lb, extent;
+            MPI_Type_get_extent(this->mpitype, &lb, &extent);
+            MPI_Aint displ = nblocks*intmax*extent;
+            MPI_Aint displs[2] = {0, displ};
+            int blocklen[2] = {1, 1};
+            MPI_Datatype mpitypes[2] = {_blocks, _remainder};
+            MPI_Type_create_struct(2, blocklen, displs, mpitypes, &result.mpitype);
+            MPI_Type_commit(&result.mpitype);
+
+            // clean up unused types
+            MPI_Type_free(&_blocks);
+            MPI_Type_free(&_remainder);
+
+            return result;
+        }
+        MPI_Type_contiguous(count, this->mpitype, &result.mpitype);
+        return result;
+    }
+
+    // TODO: indexed/hindexed?
+
+    virtual ~datatype() {
+      // TODO: don't free, but decrease counter in type cache
         if (!builtin)
             MPI_Type_free(&mpitype);
     }
@@ -131,17 +199,19 @@ private:
     bool builtin;
 };
 
+
+// defined generalized datatype builder
+template <typename T>
+struct datatype_builder {};
+
 /*********************************************************************
  *                     Define built-in datatypes                     *
  *********************************************************************/
 
 #define MXX_DATATYPE_MPI_BUILTIN(ctype, mpi_type)                           \
-template <> class datatype<ctype> {                                         \
-public:                                                                     \
-    datatype() {}                                                           \
-    MPI_Datatype type() const {return mpi_type;}                            \
-    static constexpr size_t num_basic_elements() { return 1;}               \
-    virtual ~datatype() {}                                                  \
+template <> struct datatype_builder<ctype> {                                \
+    static MPI_Datatype get_type() {return mpi_type;}                       \
+    static size_t num_basic_elements() { return 1;}                         \
 };                                                                          \
                                                                             \
 template <> class is_builtin_type<ctype> : public std::true_type {};        \
@@ -213,36 +283,27 @@ MXX_DATATYPE_BUILTIN_PAIR(long double, MPI_LONG_DOUBLE_INT);
  * @brief   MPI datatype mapping for std::array
  */
 template <typename T, std::size_t size>
-class datatype<std::array<T, size> > {
-public:
-    datatype() : _base_type() {
-        MPI_Type_contiguous(size, _base_type.type(), &_type);
+struct datatype_builder<std::array<T, size> > {
+    static MPI_Datatype get_type() {
+        MPI_Datatype _type;
+        MPI_Datatype base_type = get_datatype<T>().type();
+        MPI_Type_contiguous(size, base_type, &_type);
         MPI_Type_commit(&_type);
-    }
-    const MPI_Datatype& type() const {
         return _type;
     }
-    MPI_Datatype& type() {
-        return _type;
+    static size_t num_basic_elements() {
+        return size*datatype_builder<T>::num_basic_elements();
     }
-    virtual ~datatype() {
-        MPI_Type_free(&_type);
-    }
-    static constexpr size_t num_basic_elements() {
-        return size*datatype<T>::num_basic_elements();
-    }
-private:
-    MPI_Datatype _type;
-    datatype<T> _base_type;
 };
 
 /**
  * @brief   MPI datatype mapping for std::pair
  */
 template <typename T1, typename T2>
-class datatype<std::pair<T1, T2> > {
-public:
-    datatype() : _base_type1(), _base_type2() {
+struct datatype_builder<std::pair<T1, T2> > {
+    static MPI_Datatype get_type() {
+        MPI_Datatype _type;
+
         int blocklen[2] = {1, 1};
         MPI_Aint displs[2] = {0,0};
         // get actual displacement (in case of padding in the structure)
@@ -255,11 +316,11 @@ public:
         displs[1] = t2_adr - p_adr;
 
         // create type
-        MPI_Datatype types[2] = {_base_type1.type(), _base_type2.type()};
+        // TODO: use cached type!
+        MPI_Datatype types[2] = {datatype_builder<T1>::get_type(), datatype_builder<T2>::get_type()};
         // in case elements are represented the opposite way around in
         // the pair (gcc does so), then swap them
-        if (displs[0] > displs[1])
-        {
+        if (displs[0] > displs[1]) {
             std::swap(displs[0], displs[1]);
             std::swap(types[0], types[1]);
         }
@@ -269,34 +330,21 @@ public:
         MPI_Type_create_resized(struct_type, 0, sizeof(p), &_type);
         MPI_Type_commit(&_type);
         MPI_Type_free(&struct_type);
-    }
-    const MPI_Datatype& type() const {
         return _type;
     }
-    MPI_Datatype& type() {
-        return _type;
+
+    static size_t num_basic_elements() {
+        return datatype_builder<T1>::num_basic_elements() + datatype_builder<T2>::num_basic_elements();
     }
-    virtual ~datatype() {
-        MPI_Type_free(&_type);
-    }
-    static constexpr size_t num_basic_elements() {
-        return datatype<T1>::num_basic_elements() + datatype<T2>::num_basic_elements();
-    }
-private:
-    MPI_Datatype _type;
-    datatype<T1> _base_type1;
-    datatype<T2> _base_type2;
 };
 
 
 // fill in MPI types
-template <std::size_t N, std::size_t I>
-struct tuple_members
-{
-    template<class ...Types>
-    static void get(std::map<MPI_Aint, MPI_Datatype>& members, std::tuple<datatype<Types>...>& datatypes)
-    {
+template <std::size_t N, std::size_t I, class ...Types>
+struct tuple_members {
+    static void get(std::map<MPI_Aint, MPI_Datatype>& members) {
         // init tuple to get measurement offsets
+        // TODO: use null-ref instead of actual instantiation
         std::tuple<Types...> tuple;
 
         // get member displacement
@@ -306,22 +354,21 @@ struct tuple_members
         // byte offset from beginning of tuple
         MPI_Aint displ = elem_adr - t_adr;
         // fill in type
-        MPI_Datatype mpi_dt = std::get<N-I>(datatypes).type();
+        // TODO: use cached type!?
+        MPI_Datatype mpi_dt = datatype_builder<typename std::tuple_element<N-I,std::tuple<Types...>>::type>::get_type(); //std::get<N-I>(datatypes).type();
 
         // add to map
         members[displ] = mpi_dt;
 
         // recursively (during compile time) call same function
-        tuple_members<N,I-1>::get(members, datatypes);
+        tuple_members<N,I-1, Types...>::get(members);
     }
 };
 
 // Base case of meta-recursion
-template <std::size_t N>
-struct tuple_members<N, 0>
-{
-    template<class ...Types>
-    static void get(std::map<MPI_Aint, MPI_Datatype>&, std::tuple<datatype<Types>...>&) {
+template <std::size_t N, class ...Types>
+struct tuple_members<N, 0, Types...> {
+    static void get(std::map<MPI_Aint, MPI_Datatype>&) {
     }
 };
 
@@ -331,37 +378,42 @@ struct tuple_basic_els;
 template <class T, class...Types>
 struct tuple_basic_els<T,Types...>
 {
-    static constexpr size_t get_num = datatype<T>::num_basic_elements() + tuple_basic_els<Types...>::get_num;
+    static size_t get_num() {
+        return datatype_builder<T>::num_basic_elements() + tuple_basic_els<Types...>::get_num();
+    }
 };
 
 template <class T>
 struct tuple_basic_els<T>
 {
-    static constexpr size_t get_num = datatype<T>::num_basic_elements();
+    static size_t get_num() {
+        return datatype_builder<T>::num_basic_elements();
+    }
 };
 
 /**
  * @brief   MPI datatype mapping for std::tuple
  */
 template <class ...Types>
-class datatype<std::tuple<Types...> > {
-private:
+struct datatype_builder<std::tuple<Types...> > {
+  // tuple type
   typedef std::tuple<Types...> tuple_t;
-  typedef std::tuple<datatype<Types>...> datatypes_tuple_t;
+  // number of elements of the typle
   static constexpr std::size_t size = std::tuple_size<tuple_t>::value;
-public:
-    datatype() : _base_types() {
+
+  /// returns the MPI_Datatype for the tuple
+  static MPI_Datatype get_type() {
+        MPI_Datatype _type;
         // fill in the block lengths to 1 each
         int blocklen[size];
-        for (std::size_t i = 0; i < size; ++i)
-        {
+        for (std::size_t i = 0; i < size; ++i) {
             blocklen[i] = 1;
         }
 
         // get the member displacement and type info for the tuple using
         // meta-recursion
         std::map<MPI_Aint, MPI_Datatype> members;
-        tuple_members<size,size>::get(members, _base_types);
+        tuple_members<size,size,Types...>::get(members);
 
 
         // fill displacements and types according to in-memory order in tuple
@@ -386,25 +438,13 @@ public:
         MPI_Type_create_resized(struct_type, 0, sizeof(tuple_t), &_type);
         MPI_Type_commit(&_type);
         MPI_Type_free(&struct_type);
-    }
 
-    const MPI_Datatype& type() const {
         return _type;
     }
 
-    MPI_Datatype& type() {
-        return _type;
+    static size_t num_basic_elements() {
+        return tuple_basic_els<Types...>::get_num();
     }
-
-    virtual ~datatype() {
-        MPI_Type_free(&_type);
-    }
-    static constexpr size_t num_basic_elements() {
-        return tuple_basic_els<Types...>::get_num;
-    }
-private:
-    MPI_Datatype _type;
-    datatypes_tuple_t _base_types;
 };
 
 
@@ -417,79 +457,49 @@ private:
 /**
  * @brief   A contiguous datatype of the same base type
  */
-template <typename T, std::size_t size = 0>
-class datatype_contiguous {
-  static_assert(size <= std::numeric_limits<int>::max(),
-          "Compile time contiguous types only support sizes up to INT_MAX");
-public:
-    datatype_contiguous() : _base_type() {
+template <typename T, std::size_t size>
+struct datatype_contiguous {
+    static_assert(size <= std::numeric_limits<int>::max(),
+                  "Compile time contiguous types only support sizes up to INT_MAX");
+    static MPI_Datatype get_type() {
+        MPI_Datatype _type;
+        datatype _base_type = get_datatype<T>();
         MPI_Type_contiguous(size, _base_type.type(), &_type);
         MPI_Type_commit(&_type);
-    }
-    virtual MPI_Datatype& type() {
         return _type;
     }
-    virtual ~datatype_contiguous() {
-        MPI_Type_free(&_type);
+    static size_t num_basic_elements() {
+        return size*datatype_builder<T>::num_basic_elements();
     }
-    static constexpr size_t num_basic_elements() {
-        return size*datatype<T>::num_basic_elements();
-    }
-private:
-    MPI_Datatype _type;
-    datatype<T> _base_type;
 };
 
 /*
  * Runtime selection of size
  */
+/*
 template <typename T>
-class datatype_contiguous<T,0> {
-public:
-    datatype_contiguous(std::size_t size) : _base_type() {
-        if (size <= mxx::max_int)
-        {
-            MPI_Type_contiguous(size, _base_type.type(), &_type);
-            MPI_Type_commit(&_type);
-        } else {
-            // create custom data types of blocks and remainder
-            std::size_t intmax = std::numeric_limits<int>::max();
-            std::size_t nblocks = size / intmax;
-            std::size_t rem = size % intmax;
-
-            // create block and remainder data types
-            datatype_contiguous<T, std::numeric_limits<int>::max()> _block;
-            MPI_Datatype _blocks;
-            MPI_Datatype _remainder;
-            // create two contiguous types for blocks and remainder
-            MPI_Type_contiguous(nblocks, _block.type(), &_blocks);
-            MPI_Type_contiguous(rem, _base_type.type(), &_remainder);
-
-            // create struct for the concatenation of this type
-            MPI_Aint lb, extent;
-            MPI_Type_get_extent(_base_type.type(), &lb, &extent);
-            MPI_Aint displ = nblocks*intmax*extent;
-            MPI_Aint displs[2] = {0, displ};
-            int blocklen[2] = {1, 1};
-            MPI_Datatype mpitypes[2] = {_blocks, _remainder};
-            MPI_Type_create_struct(2, blocklen, displs, mpitypes, &_type);
-            MPI_Type_commit(&_type);
-
-            // clean up unused types
-            MPI_Type_free(&_blocks);
-            MPI_Type_free(&_remainder);
-        }
+struct datatype_contiguous<T,0> {
+    static MPI_Datatype get_type(size_t size) {
+        datatype dt = get_datatype<T>().contiguous(size);
+        MPI_Datatype mpidt;
+        MPI_Type_dup(dt.type(), &mpidt);
+        MPI_Type_commit(&mpidt);
+        return mpidt;
     }
-    virtual MPI_Datatype& type() {
-        return _type;
-    }
-    virtual ~datatype_contiguous() {
-        MPI_Type_free(&_type);
-    }
-private:
-    MPI_Datatype _type;
-    datatype<T> _base_type;
 };
+*/
+
+template <typename T>
+datatype get_datatype() {
+    datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
+    return dt;
+}
+
+template <typename T>
+datatype get_datatype(const T&) {
+    datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
+    return dt;
+}
 
 } // namespace mxx
 

@@ -272,7 +272,7 @@ public:
     inline void send(const T& msg, int dest, int tag = 0) const {
         MXX_ASSERT(sizeof(T) < mxx::max_int);
         MXX_ASSERT(0 <= dest && dest < this->size());
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Send(const_cast<T*>(&msg), 1, dt.type(), dest, tag, this->mpi_comm);
     }
 
@@ -282,10 +282,10 @@ public:
         MXX_ASSERT(0 <= dest && dest < this->size());
         MXX_ASSERT(msg != nullptr);
         if (size < mxx::max_int) {
-            mxx::datatype<T> dt;
+            mxx::datatype dt = mxx::get_datatype<T>();
             MPI_Send(const_cast<T*>(msg), size, dt.type(), dest, tag, this->mpi_comm);
         } else {
-            mxx::datatype_contiguous<T> dt(size);
+            mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
             MPI_Send(const_cast<T*>(msg), 1, dt.type(), dest, tag, this->mpi_comm);
         }
     }
@@ -307,10 +307,10 @@ public:
     inline void send(const CharT(&msg)[N], int dest, int tag = 0) const {
         MXX_ASSERT(0 <= dest && dest < this->size());
         if (N < mxx::max_int) {
-            mxx::datatype<CharT> dt;
+            mxx::datatype dt = mxx::get_datatype<CharT>();
             MPI_Send(const_cast<CharT*>(msg), N-1, dt.type(), dest, tag, this->mpi_comm);
         } else {
-            mxx::datatype_contiguous<CharT> dt(N-1);
+            mxx::datatype dt = mxx::get_datatype<CharT>().contiguous(N-1);
             MPI_Send(const_cast<CharT*>(msg), 1, dt.type(), dest, tag, this->mpi_comm);
         }
     }
@@ -325,7 +325,7 @@ public:
     inline mxx::future<void> isend(const T& msg, int dest, int tag = 0) const {
         MXX_ASSERT(sizeof(T) < mxx::max_int);
         MXX_ASSERT(0 <= dest && dest < this->size());
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>;
         mxx::future_builder<void> f;
         MPI_Isend(const_cast<T*>(&msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
         return f.get_future();
@@ -337,10 +337,10 @@ public:
         MXX_ASSERT(0 <= dest && dest < this->size());
         mxx::future_builder<void> f;
         if (size < mxx::max_int) {
-            mxx::datatype<T> dt;
+            mxx::datatype dt = mxx::get_datatype<T>();
             MPI_Isend(const_cast<T*>(msg), size, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
         } else {
-            mxx::datatype_contiguous<T> dt(size);
+            mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
             MPI_Isend(const_cast<T*>(msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
         }
         return f.get_future();
@@ -414,7 +414,7 @@ public:
 template <typename T>
 struct recv_impl {
     static inline void do_recv_into(int src, int tag, T& buf, MPI_Comm c) {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Recv(&buf, 1, dt.type(), src, tag, c, MPI_STATUS_IGNORE);
     }
     static inline T do_recv(int src, int tag, MPI_Comm c) {
@@ -435,7 +435,7 @@ struct recv_container_impl {
     static inline void do_recv_into(int src, int tag, Container& buf, MPI_Comm c) {
         // TODO: how do I do this in async?
         typedef typename Container::value_type T;
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Status stat;
 #if MPI_VERSION >= 3
         // threadsafe version with MProbe and MRecv (only if MPI-3)
@@ -450,16 +450,16 @@ struct recv_container_impl {
         //               e.g. by sending single element to MPI_COMM_SELF and MPI_Get_elements_x on status
         //               and do so the first time a type gets created
         //               and then cache the information in the datatype
-        MXX_ASSERT(count % mxx::datatype<T>::num_basic_elements == 0);
-        size = count / mxx::datatype<T>::num_basic_elements;
+        MXX_ASSERT(count % mxx::datatype_builder<T>::num_basic_elements() == 0);
+        size = count / mxx::datatype_builder<T>::num_basic_elements();
         if (buf.size() != size)
             buf.resize(size);
         // receive into buffer
         if (size < mxx::max_int) {
-            mxx::datatype<T> dt;
+            mxx::datatype dt = mxx::get_datatype<T>();
             MPI_Mrecv(const_cast<T*>(&buf[0]), size, dt.type(), &msg, &stat);
         } else {
-            mxx::datatype_contiguous<T> dt(size);
+            mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
             MPI_Mrecv(const_cast<T*>(&buf[0]), 1, dt.type(), &msg, &stat);
         }
 #else
@@ -522,10 +522,10 @@ void comm::recv_into(T* buffer, size_t size, int src, int tag) const {
     MXX_ASSERT(0 <= src && src < this->size());
     MXX_ASSERT(buffer != nullptr);
     if (size < mxx::max_int) {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Recv(const_cast<T*>(buffer), size, dt.type(), src, tag, MPI_STATUS_IGNORE);
     } else {
-        mxx::datatype_contiguous<T> dt(size);
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
         MPI_Recv(const_cast<T*>(buffer), 1, dt.type(), src, tag, MPI_STATUS_IGNORE);
     }
 }
@@ -556,7 +556,7 @@ template <typename T>
 inline mxx::future<T> comm::irecv(int src, int tag) const {
     MXX_ASSERT(0 <= src && src < this->size());
     mxx::future_builder<T> f;
-    mxx::datatype<T> dt;
+    mxx::datatype dt = mxx::get_datatype<T>();
     MPI_Irecv(f.data(), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     return std::move(f.get_future());
 }
@@ -567,7 +567,7 @@ template <typename T>
 inline mxx::future<void> comm::irecv_into(T& buffer, int src, int tag) const {
     MXX_ASSERT(0 <= src && src < this->size());
     mxx::future_builder<void> f;
-    mxx::datatype<T> dt;
+    mxx::datatype dt = mxx::get_datatype<T>();
     MPI_Irecv(&buffer, 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     return f.get_future();
 }
@@ -579,10 +579,10 @@ inline mxx::future<void> comm::irecv_into(T* buffer, size_t count, int src, int 
     MXX_ASSERT(buffer != nullptr);
     mxx::future_builder<void> f;
     if (count < mxx::max_int) {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Irecv(buffer, count, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     } else {
-        mxx::datatype_contiguous<T> dt(count);
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(count);
         MPI_Irecv(buffer, 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     }
     return f.get_future();
@@ -595,10 +595,10 @@ inline mxx::future<std::vector<T, Alloc> > comm::irecv_vec(size_t size, int src,
     mxx::future_builder<std::vector<T, Alloc> > f;
     f.data()->resize(size);
     if (size < mxx::max_int) {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Irecv(&(f.data()->front()), size, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     } else {
-        mxx::datatype_contiguous<T> dt(size);
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
         MPI_Irecv(&(f.data()->front()), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     }
     return f.get_future();
@@ -611,10 +611,10 @@ inline mxx::future<std::basic_string<CharT, Traits, Alloc> > comm::irecv_str(siz
     mxx::future_builder<std::basic_string<CharT, Traits, Alloc> > f;
     f.data()->resize(size);
     if (size < mxx::max_int) {
-        mxx::datatype<CharT> dt;
+        mxx::datatype dt = mxx::get_datatype<CharT>();
         MPI_Irecv(&(f.data()->front()), size, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     } else {
-        mxx::datatype_contiguous<CharT> dt(size);
+        mxx::datatype dt = mxx::get_datatype<CharT>().contiguous(size);
         MPI_Irecv(&(f.data()->front()), 1, dt.type(), src, tag, this->mpi_comm, &f.add_request());
     }
     return std::move(f.get_future());

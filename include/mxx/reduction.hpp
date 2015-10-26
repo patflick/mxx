@@ -198,7 +198,7 @@ public:
                 // this op is builtin, save it as such and don't copy built-in type
                 m_builtin = true;
                 m_op = op;
-                mxx::datatype<T> dt;
+                mxx::datatype dt = mxx::get_datatype<T>();
                 m_type_copy = dt.type();
             }
         }
@@ -208,7 +208,7 @@ public:
             m_user_func = std::bind(custom_op::custom_function<Func>,
                                   std::forward<Func>(func), _1, _2, _3);
             // get datatype associated with the type `T`
-            mxx::datatype<T> dt;
+            mxx::datatype dt = mxx::get_datatype<T>();
             // attach function to a copy of the datatype
             MPI_Type_dup(dt.type(), &m_type_copy);
             attr_map<int, func_t>::set(m_type_copy, 1347, m_user_func);
@@ -499,7 +499,7 @@ inline typename std::iterator_traits<Iterator>::value_type global_reduce(Iterato
         }
         // get rank of processor for bcast
         int bcast_src = mxx::allreduce(bcast_rank, mxx::max<int>(), comm);
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Bcast(&result, 1, dt.type(), bcast_src, comm);
         return result;
     } else {

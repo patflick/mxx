@@ -43,10 +43,9 @@ namespace mxx
 {
 
 template <typename T>
-T right_shift(const T& t, const mxx::comm& comm = mxx::comm())
-{
+T right_shift(const T& t, const mxx::comm& comm = mxx::comm()) {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 13;
@@ -74,7 +73,7 @@ template <typename T>
 void right_shift(const T* in, size_t n, T* out, const mxx::comm& comm = mxx::comm())
 {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 13;
@@ -100,7 +99,7 @@ template <typename T>
 std::vector<T> right_shift(const std::vector<T>& v, const mxx::comm& comm = mxx::comm())
 {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 13;
@@ -131,7 +130,7 @@ std::vector<T> right_shift(const std::vector<T>& v, const mxx::comm& comm = mxx:
 template <typename T>
 T left_shift(const T& t, const mxx::comm& comm = mxx::comm()) {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
@@ -159,7 +158,7 @@ template <typename T>
 void left_shift(const T* in, size_t n, T* out, const mxx::comm& comm = mxx::comm())
 {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
@@ -186,7 +185,7 @@ template <typename T>
 std::vector<T> left_shift(const std::vector<T>& v, const mxx::comm& comm = mxx::comm())
 {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
@@ -220,7 +219,7 @@ template <typename CharT>
 std::basic_string<CharT> left_shift(const std::basic_string<CharT>& str, const mxx::comm& comm = mxx::comm())
 {
     // get datatype
-    datatype<CharT> dt;
+    datatype dt = get_datatype<CharT>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
@@ -253,7 +252,7 @@ std::basic_string<CharT> left_shift(const std::basic_string<CharT>& str, const m
 template <typename T>
 mxx::future<T> async_right_shift(const T& x, const mxx::comm& comm = mxx::comm()) {
     // get datatype
-    mxx::datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;
@@ -277,7 +276,7 @@ mxx::future<T> async_right_shift(const T& x, const mxx::comm& comm = mxx::comm()
 template <typename T>
 mxx::future<T> async_left_shift(const T& x, const mxx::comm& comm = mxx::comm()) {
     // get datatype
-    datatype<T> dt;
+    datatype dt = get_datatype<T>();
 
     // TODO: handle tags with MXX (get unique tag function)
     int tag = 15;

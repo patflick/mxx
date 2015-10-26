@@ -488,7 +488,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& 
     typedef typename std::iterator_traits<_Iterator>::value_type value_type;
 
     // get MPI type
-    mxx::datatype<value_type> dt;
+    mxx::datatype dt = mxx::get_datatype<value_type>();
     MPI_Datatype mpi_dt = dt.type();
 
     // sort

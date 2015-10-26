@@ -90,10 +90,9 @@ void scatter(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm
         impl::scatter_big(msgs, size, out, root, comm);
     } else {
         // regular implementation
-        mxx::datatype<T> dt;
-        int isize = size;
-        MPI_Scatter(const_cast<T*>(msgs), isize, dt.type(),
-                    out, isize, dt.type(), root, comm);
+        mxx::datatype dt = mxx::get_datatype<T>();
+        MPI_Scatter(const_cast<T*>(msgs), size, dt.type(),
+                    out, size, dt.type(), root, comm);
     }
 }
 
@@ -193,7 +192,7 @@ template <typename T>
 std::vector<T> scatter(const std::vector<T>& msgs, int root, const mxx::comm& comm = mxx::comm()) {
     size_t size = msgs.size() / comm.size();
     MXX_ASSERT(comm.rank() != 0 || msgs.size() % (size_t)comm.size() == 0);
-    mxx::datatype<size_t> sizedt;
+    mxx::datatype sizedt = mxx::get_datatype<size_t>();
     MPI_Bcast(&size, 1, sizedt.type(), root, comm);
     // now everybody knows the size
     std::vector<T> result = scatter(msgs, size, root, comm);
@@ -220,7 +219,7 @@ std::vector<T> scatter(const std::vector<T>& msgs, int root, const mxx::comm& co
 template <typename T>
 std::vector<T> scatter_recv(int root, const mxx::comm& comm = mxx::comm()) {
     size_t size;
-    mxx::datatype<size_t> sizedt;
+    mxx::datatype sizedt = mxx::get_datatype<size_t>();
     MPI_Bcast(&size, 1, sizedt.type(), root, comm);
     // now everybody knows the size
     std::vector<T> result = scatter_recv<T>(size, root, comm);
@@ -320,7 +319,7 @@ void scatterv(const T* msgs, const std::vector<size_t>& sizes, T* out, size_t re
     MXX_ASSERT(root != comm.rank() || sizes.size() == static_cast<size_t>(comm.size()));
     // get total send size
     size_t send_size = std::accumulate(sizes.begin(), sizes.end(), 0);
-    mxx::datatype<size_t> sizedt;
+    mxx::datatype sizedt = mxx::get_datatype<size_t>();
     MPI_Bcast(&send_size, 1, sizedt.type(), root, comm);
     // check if we need to use the custom BIG scatterv
     if (send_size >= mxx::max_int) {
@@ -328,7 +327,7 @@ void scatterv(const T* msgs, const std::vector<size_t>& sizes, T* out, size_t re
         impl::scatterv_big(msgs, sizes, out, recv_size, root, comm);
     } else {
         // regular implementation using integer counts
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         int irecv_size = recv_size;
         if (comm.rank() == root) {
             std::vector<int> send_counts(comm.size());
@@ -574,7 +573,7 @@ void gather(const T* data, size_t size, T* out, int root, const mxx::comm& comm 
         // use custom implementation for big data
         impl::gather_big(data, size, out, root, comm);
     } else {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Gather(const_cast<T*>(data), size, dt.type(), out, size, dt.type(), root, comm);
     }
 }
@@ -699,7 +698,7 @@ std::vector<T> gather(const T& x, int root, const mxx::comm& comm = mxx::comm())
 template <typename T>
 void gatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
     size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
-    mxx::datatype<size_t> mpi_sizet;
+    mxx::datatype mpi_sizet = mxx::get_datatype<size_t>();
     // tell everybody about the total size
     MPI_Bcast(&total_size, 1, mpi_sizet.type(), root, comm);
     if (total_size >= mxx::max_int) {
@@ -707,7 +706,7 @@ void gatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv
         impl::gatherv_big(data, size, out, recv_sizes, root, comm);
     } else {
         // use standard MPI_Gatherv
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         if (comm.rank() == root) {
             std::vector<int> counts(comm.size());
             std::copy(recv_sizes.begin(), recv_sizes.end(), counts.begin());
@@ -887,7 +886,7 @@ void allgather(const T* data, size_t size, T* out, const mxx::comm& comm = mxx::
         // use custom implementation for big data
         impl::allgather_big(data, size, out, comm);
     } else {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Allgather(const_cast<T*>(data), size, dt.type(), out, size, dt.type(), comm);
     }
 }
@@ -994,13 +993,13 @@ template <typename T>
 void allgatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
     size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
     MXX_ASSERT(recv_sizes.size() == static_cast<size_t>(comm.size()));
-    mxx::datatype<size_t> mpi_sizet;
+    mxx::datatype mpi_sizet = mxx::get_datatype<size_t>();
     if (total_size >= mxx::max_int) {
         // use custom implementation for large sizes
         impl::allgatherv_big(data, size, out, recv_sizes, comm);
     } else {
         // use standard MPI_Gatherv
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         std::vector<int> counts(comm.size());
         std::copy(recv_sizes.begin(), recv_sizes.end(), counts.begin());
         std::vector<int> displs = impl::get_displacements(counts);
@@ -1151,7 +1150,7 @@ void all2all(const T* msgs, size_t size, T* out, const mxx::comm& comm = mxx::co
     if (size*comm.size() >= mxx::max_int) {
         impl::all2all_big(msgs, size, out, comm);
     } else {
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Alltoall(const_cast<T*>(msgs), size, dt.type(), out, size, dt.type(), comm);
     }
 }
@@ -1239,7 +1238,7 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
     size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), 0);
     size_t total_recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
     size_t local_max_size = std::max(total_send_size, total_recv_size);
-    mxx::datatype<size_t> mpi_sizet;
+    mxx::datatype mpi_sizet = mxx::get_datatype<size_t>();
     size_t max;
     MPI_Allreduce(&local_max_size, &max, 1, mpi_sizet.type(), MPI_MAX, comm);
     if (max >= mxx::max_int) {
@@ -1252,7 +1251,7 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
         std::vector<int> send_displs = impl::get_displacements(send_counts);
         std::vector<int> recv_displs = impl::get_displacements(recv_counts);
         // call regular alltoallv
-        mxx::datatype<T> dt;
+        mxx::datatype dt = mxx::get_datatype<T>();
         MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_displs[0], dt.type(),
                       out, &recv_counts[0], &recv_displs[0], dt.type(), comm);
     }
