@@ -27,7 +27,25 @@
 
 namespace mxx {
 
+void my_mpi_errorhandler(MPI_Comm* comm, int* error_code, ...) {
+    char buf[MPI_MAX_ERROR_STRING];
+    int strlen;
+    int error_class;
+
+    MPI_Error_class(*error_code, &error_class);
+    MPI_Error_string(error_class, buf, &strlen);
+    std::string classstr(buf);
+    //fprintf(stderr, "%3d: %s\n", my_rank, error_string);
+    MPI_Error_string(*error_code, buf, &strlen);
+    std::string errorstr(buf);
+    //fprintf(stderr, "%3d: %s\n", my_rank, error_string);
+    // throw exception, enables gdb stack trace analysis
+    std::terminate();
+    throw std::runtime_error("[MPI Error] class: " + classstr + "\n[MPI Error] " + errorstr);
+}
+
 class env {
+public:
 
     env() {
         if (!env::initialized()) {
@@ -67,6 +85,18 @@ class env {
         int fin;
         MPI_Finalized(&fin);
         return fin != 0;
+    }
+
+    static void set_exception_on_error() {
+        // set custom error handler (for debugging with working stack-trace on gdb)
+        MPI_Errhandler errhandler;
+#if MPI_VERSION >= 2
+        MPI_Comm_create_errhandler(&my_mpi_errorhandler, &errhandler);
+        MPI_Comm_set_errhandler(MPI_COMM_WORLD, errhandler);
+#else
+        MPI_Errhandler_create(&my_mpi_errorhandler, &errhandler);
+        MPI_Errhandler_set(MPI_COMM_WORLD, errhandler);
+#endif
     }
 };
 

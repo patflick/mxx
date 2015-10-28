@@ -23,6 +23,8 @@
 #include <mpi.h>
 #include <gtest/gtest.h>
 #include "mxx_eventlistener.hpp"
+#include <mxx/env.hpp>
+#include <mxx/comm.hpp>
 #include <iostream>
 
 
@@ -30,28 +32,26 @@ int main(int argc, char* argv[]) {
     int result = 0;
 
     ::testing::InitGoogleTest(&argc, argv);
-    MPI_Init(&argc, &argv);
 
-    // get processor rank
-    int rank, p;
-    MPI_Comm_size(MPI_COMM_WORLD, &p);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    mxx::env e(argc, argv);
+    mxx::comm c = mxx::comm();
+    //MPI_Init(&argc, &argv);
 
-    if (rank == 0)
-      std::cout << "Running GTEST with MPI using " << p << " processes." << std::endl;
+    if (c.rank() == 0)
+      std::cout << "Running GTEST with MPI using " << c.size() << " processes." << std::endl;
 
     // set up wrapped test listener
     ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
     ::testing::TestEventListener* default_listener =  listeners.Release(listeners.default_result_printer());
-    listeners.Append(new mxx_gtest::MpiTestEventListener(rank, default_listener));
+    listeners.Append(new mxx_gtest::MpiTestEventListener(c.rank(), default_listener));
 
     // running tests
     result = RUN_ALL_TESTS();
-    if (rank != 0)
+    if (c.rank() != 0)
       result = 0;
 
     // clean up MPI
-    MPI_Finalize();
+    //MPI_Finalize();
 
     // return good status no matter what
     return result;

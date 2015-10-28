@@ -94,15 +94,7 @@ public:
     }
 
     // copy constructor
-    datatype(const datatype& o) {
-        builtin = o.builtin;
-        if (builtin) {
-            mpitype = o.mpitype;
-        } else {
-            MPI_Type_dup(o.mpitype, &mpitype);
-            MPI_Type_commit(&mpitype);
-        }
-    }
+    datatype(const datatype& o) = delete;
 
     // move constructor
     datatype(datatype&& o) {
@@ -113,16 +105,7 @@ public:
     }
 
     // copy assignment
-    datatype& operator=(const datatype& o) {
-        builtin = o.builtin;
-        if (builtin) {
-            mpitype = o.mpitype;
-        } else {
-            MPI_Type_dup(o.mpitype, &mpitype);
-            MPI_Type_commit(&mpitype);
-        }
-        return *this;
-    }
+    datatype& operator=(const datatype& o) = delete;
 
     // move assignment
     datatype& operator=(datatype&& o) {
@@ -148,11 +131,12 @@ public:
 
     datatype contiguous(size_t count) const {
         datatype result;
-        result.builtin = false;
         if (count <= mxx::max_int) {
+            result.builtin = false;
             MPI_Type_contiguous(count, this->mpitype, &result.mpitype);
             MPI_Type_commit(&result.mpitype);
         } else {
+            result.builtin = false;
             // create custom data types of blocks and remainder
             std::size_t intmax = mxx::max_int;
             std::size_t nblocks = count / intmax;
@@ -162,28 +146,29 @@ public:
             MPI_Datatype _block;
             MPI_Type_contiguous(mxx::max_int, this->mpitype, &_block);
             MPI_Datatype _blocks;
-            MPI_Datatype _remainder;
             // create two contiguous types for blocks and remainder
             MPI_Type_contiguous(nblocks, _block, &_blocks);
-            MPI_Type_contiguous(rem, this->mpitype, &_remainder);
 
-            // create struct for the concatenation of this type
-            MPI_Aint lb, extent;
-            MPI_Type_get_extent(this->mpitype, &lb, &extent);
-            MPI_Aint displ = nblocks*intmax*extent;
-            MPI_Aint displs[2] = {0, displ};
-            int blocklen[2] = {1, 1};
-            MPI_Datatype mpitypes[2] = {_blocks, _remainder};
-            MPI_Type_create_struct(2, blocklen, displs, mpitypes, &result.mpitype);
-            MPI_Type_commit(&result.mpitype);
+            if (rem > 0) {
+                MPI_Datatype _remainder;
+                MPI_Type_contiguous(rem, this->mpitype, &_remainder);
 
-            // clean up unused types
-            MPI_Type_free(&_blocks);
-            MPI_Type_free(&_remainder);
-
-            return result;
+                // create struct for the concatenation of this type
+                MPI_Aint lb, extent;
+                MPI_Type_get_extent(this->mpitype, &lb, &extent);
+                MPI_Aint displ = nblocks*intmax*extent;
+                MPI_Aint displs[2] = {0, displ};
+                int blocklen[2] = {1, 1};
+                MPI_Datatype mpitypes[2] = {_blocks, _remainder};
+                MPI_Type_create_struct(2, blocklen, displs, mpitypes, &result.mpitype);
+                MPI_Type_commit(&result.mpitype);
+                MPI_Type_free(&_remainder);
+                MPI_Type_free(&_blocks);
+            } else {
+                result.mpitype = _blocks;
+                MPI_Type_commit(&result.mpitype);
+            }
         }
-        MPI_Type_contiguous(count, this->mpitype, &result.mpitype);
         return result;
     }
 

@@ -75,8 +75,7 @@ std::vector<index_t> get_displacements(const std::vector<index_t>& counts)
  * @param comm
  */
 template <typename T>
-void scatter_big(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm = mxx::comm())
-{
+void scatter_big(const T* msgs, size_t size, T* out, int root, const mxx::comm& comm = mxx::comm()) {
     mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
     MPI_Scatter(const_cast<T*>(msgs), 1, dt.type(), out, 1, dt.type(), root, comm);
 }
