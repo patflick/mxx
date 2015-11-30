@@ -297,6 +297,35 @@ void all2allv_big(const T* msgs, const std::vector<size_t>& send_sizes, T* out, 
     reqs.wait();
 }
 
+template <typename T>
+void all2allv_big(const T* msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& send_displs, T* out, const std::vector<size_t>& recv_sizes, const std::vector<size_t>& recv_displs, const mxx::comm& comm = mxx::comm()) {
+    // point-to-point implementation
+    // TODO: implement MPI_Alltoallw variant
+    // TODO: try RMA
+    MXX_ASSERT(static_cast<int>(send_sizes.size()) == comm.size());
+    MXX_ASSERT(static_cast<int>(recv_sizes.size()) == comm.size());
+    // TODO: unify tag usage
+    int tag = 12345;
+    // implementing this using point-to-point communication!
+    // dispatch receives
+    mxx::requests reqs;
+    for (int i = 0; i < comm.size(); ++i) {
+        // start with self send/recv
+        int recv_from = (comm.rank() + (comm.size()-i)) % comm.size();
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(recv_sizes[recv_from]);
+        MPI_Irecv(const_cast<T*>(&(*out)) + recv_displs[recv_from], 1, dt.type(),
+                  recv_from, tag, comm, &reqs.add());
+    }
+    // dispatch sends
+    for (int i = 0; i < comm.size(); ++i) {
+        int send_to = (comm.rank() + i) % comm.size();
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(send_sizes[send_to]);
+        MPI_Isend(const_cast<T*>(msgs)+send_displs[send_to], 1, dt.type(), send_to,
+                  tag, comm, &reqs.add());
+    }
+
+    reqs.wait();
+}
 
 } // namespace impl
 } // namespace mxx

@@ -1257,6 +1257,30 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
     }
 }
 
+template <typename T>
+void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& send_displs, T* out, const std::vector<size_t>& recv_sizes, const std::vector<size_t>& recv_displs, const mxx::comm& comm = mxx::comm()) {
+    size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), 0);
+    size_t total_recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), 0);
+    size_t local_max_size = std::max(total_send_size, total_recv_size);
+    mxx::datatype mpi_sizet = mxx::get_datatype<size_t>();
+    size_t max;
+    MPI_Allreduce(&local_max_size, &max, 1, mpi_sizet.type(), MPI_MAX, comm);
+    if (max >= mxx::max_int) {
+        impl::all2allv_big(msgs, send_sizes, send_displs, out, recv_sizes, recv_displs, comm);
+    } else {
+        // convert vectors to integer counts
+        std::vector<int> send_counts(send_sizes.begin(), send_sizes.end());
+        std::vector<int> recv_counts(recv_sizes.begin(), recv_sizes.end());
+        // get displacements
+        std::vector<int> send_dis(send_displs.begin(), send_displs.end());
+        std::vector<int> recv_dis(recv_displs.begin(), recv_displs.end());
+        // call regular alltoallv
+        mxx::datatype dt = mxx::get_datatype<T>();
+        MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_dis[0], dt.type(),
+                      out, &recv_counts[0], &recv_dis[0], dt.type(), comm);
+    }
+}
+
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.
  *
