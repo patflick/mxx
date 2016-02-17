@@ -33,6 +33,8 @@
 #include <algorithm>
 #include <vector>
 
+#include <cxx-prettyprint/prettyprint.hpp>
+
 #ifdef __GNUC__
 #ifndef __clang__
 // for multiway-merge
@@ -255,8 +257,6 @@ std::vector<size_t> split(_Iterator begin, _Iterator end, _Compare comp, const s
         // try to split approx equal:
         std::size_t eq_size_split = (eq_size + send_counts[i]) / (split_by+1) + 1;
         for (unsigned int j = 0; j < split_by; ++j) {
-            // TODO: this kind of splitting is not `stable` (need other strategy
-            // to mak such splitting stable across processors)
             std::size_t out_size = 0;
             if (send_counts[i+j] < local_part.local_size(i+j)) {
                 // try to distribute fairly
@@ -400,7 +400,8 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
 
     std::vector<size_t> recv_counts = mxx::all2all(send_counts, comm);
     std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), 0ull);
-    MXX_ASSERT(!_AssumeBlockDecomp || (local_size <= 2 || recv_n <= 2* local_size));
+    // TODO: use different approach if there are less than p local elements
+    MXX_ASSERT(!_AssumeBlockDecomp || (local_size <= (size_t)p || recv_n <= 2* local_size));
     std::vector<value_type> recv_elements(recv_n);
     // TODO: use collective with iterators [begin,end) instead of pointers!
     mxx::all2allv(&(*begin), send_counts, &(*recv_elements.begin()), recv_counts, comm);
