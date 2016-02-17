@@ -74,7 +74,7 @@ bool is_sorted(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& c
 
     // compare if last element on left processor is not bigger than first
     // element on mine
-    value_type left_el = mxx::right_shift(*(end-1));
+    value_type left_el = mxx::right_shift(*(end-1), comm);
 
     // check if sorted with respect to neighbors
     if (comm.rank() > 0) {
