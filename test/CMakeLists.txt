@@ -18,6 +18,10 @@ target_link_libraries(test-sort mxx-gtest-main)
 add_executable(test-distribution test_distribution.cpp)
 target_link_libraries(test-distribution mxx-gtest-main)
 
+# TODO: sequential tests should use different main
+add_executable(test-bucketing test_bucketing.cpp)
+target_link_libraries(test-bucketing mxx-gtest-main)
+
 add_executable(test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
 target_link_libraries(test-all mxx-gtest-main)
 

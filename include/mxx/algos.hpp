@@ -196,11 +196,27 @@ Iterator balanced_partitioning(Iterator begin, Iterator end, T pivot)
  *                       Bucketing algorithms                        *
  *********************************************************************/
 
-// TODO: replace this terrible bucketing algorithm
-// TODO: add other bucketing algos and benchmark!
-
 // TODO: iterator version?
-// TODO: true inplace version
+
+/**
+ * @brief   Inplace bucketing of values into `num_buckets` buckets.
+ *
+ * This particular implementation uses an internal temporary buffer
+ * of the same size as the input. Thus requiring that amount of additional
+ * memory space. For a version that doesn't need O(n) additional memory,
+ * use the (somewhat slower) `bucketing_inplace()` function below.
+ *
+ * @tparam T            Input type
+ * @tparam Func         Type of the key function.
+ * @param input[in|out] Contains the values to be bucketed.
+ *                      This vector is both input and output.
+ * @param key_func      A function taking a type T and returning the bucket index
+ *                      in the range [0, num_buckets).
+ * @param num_buckets   The total number of buckets.
+ *
+ * @return              The number of elements in each bucket.
+ *                      The size of this vector is `num_buckets`.
+ */
 template <typename T, typename Func>
 std::vector<size_t> bucketing(std::vector<T>& input, Func key_func, size_t num_buckets) {
     // initialize number of elements per bucket
@@ -232,7 +248,25 @@ std::vector<size_t> bucketing(std::vector<T>& input, Func key_func, size_t num_b
     return bucket_counts;
 }
 
-// TODO: inplace version
+// inplace version (doesn't require O(n) additional memory like the other two approaches)
+/**
+ * @brief   Inplace bucketing of values into `num_buckets` buckets.
+ *
+ * This particular implementation is truly inplace, and doesn't require O(n)
+ * additional memory like the `bucketing()` function above.
+ * However, this implementation is slightly slower (~1.5x).
+ *
+ * @tparam T            Input type
+ * @tparam Func         Type of the key function.
+ * @param input[in|out] Contains the values to be bucketed.
+ *                      This vector is both input and output.
+ * @param key_func      A function taking a type T and returning the bucket index
+ *                      in the range [0, num_buckets).
+ * @param num_buckets   The total number of buckets.
+ *
+ * @return              The number of elements in each bucket.
+ *                      The size of this vector is `num_buckets`.
+ */
 template <typename T, typename Func>
 std::vector<size_t> bucketing_inplace(std::vector<T>& input, Func key_func, size_t num_buckets) {
     // initialize number of elements per bucket
@@ -253,7 +287,7 @@ std::vector<size_t> bucketing_inplace(std::vector<T>& input, Func key_func, size
     std::vector<size_t> offset(bucket_counts.begin(), bucket_counts.end());
     std::vector<size_t> upper_bound(bucket_counts.begin(), bucket_counts.end());
     excl_prefix_sum(offset.begin(), offset.end());
-    prefix_sum(offset.begin(), offset.end());
+    prefix_sum(upper_bound.begin(), upper_bound.end());
 
     // in-place bucketing
     size_t cur_b = 0;
@@ -281,9 +315,13 @@ std::vector<size_t> bucketing_inplace(std::vector<T>& input, Func key_func, size
     return bucket_counts;
 }
 
-/// in place bucketing.  uses an extra vector of same size as msgs.  hops around msgs vector until no movement is possible.
-/// complexity is O(b) * O(n).  scales badly, same as bucketing_copy, but with a factor of 2 for large data.
-/// when fixed n, slight increase with b..  else increases with n.
+// Tony's old implementation for bucketing:
+// (needs more memory and is slower than the two versions above)
+
+// Complexity is O(b)*O(n), where as the two version above are O(b + n)
+// scales badly, same as bucketing_copy, but with a factor of 2 for large
+// data.
+// when fixed n, slight increase with b..  else increases with n.
 template<typename T, typename Func>
 std::vector<size_t> bucketing_tony(std::vector<T>& elements, Func key_func, size_t num_buckets) {
 
