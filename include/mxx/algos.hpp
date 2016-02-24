@@ -29,6 +29,8 @@
 #include <cstdlib>
 #include <vector>
 
+#include "common.hpp"
+
 namespace mxx {
 
 /**
@@ -194,12 +196,96 @@ Iterator balanced_partitioning(Iterator begin, Iterator end, T pivot)
  *                       Bucketing algorithms                        *
  *********************************************************************/
 
+// TODO: replace this terrible bucketing algorithm
+// TODO: add other bucketing algos and benchmark!
+
+// TODO: iterator version?
+// TODO: true inplace version
+template <typename T, typename Func>
+std::vector<size_t> bucketing(std::vector<T>& input, Func key_func, size_t num_buckets) {
+    // initialize number of elements per bucket
+    std::vector<size_t> bucket_counts(num_buckets, 0);
+
+    // if input is empty, simply return
+    if (input.size() == 0)
+        return bucket_counts;
+
+    // [1st pass]: counting the number of elements per bucket
+    for (auto it = input.begin(); it != input.end(); ++it) {
+        MXX_ASSERT(0 <= key_func(*it) && key_func(*it) < num_buckets);
+        bucket_counts[key_func(*it)]++;
+    }
+
+    // get offsets of where buckets start (= exclusive prefix sum)
+    std::vector<std::size_t> offset(bucket_counts.begin(), bucket_counts.end());
+    excl_prefix_sum(offset.begin(), offset.end());
+
+    // [2nd pass]: saving elements into correct position
+    std::vector<T> tmp_result(input.size());
+    for (auto it = input.begin(); it != input.end(); ++it) {
+        tmp_result[offset[key_func(*it)]++] = *it;
+    }
+
+    // replacing input with tmp result buffer and return the number of elements
+    // in each bucket
+    input.swap(tmp_result);
+    return bucket_counts;
+}
+
+// TODO: inplace version
+template <typename T, typename Func>
+std::vector<size_t> bucketing_inplace(std::vector<T>& input, Func key_func, size_t num_buckets) {
+    // initialize number of elements per bucket
+    std::vector<size_t> bucket_counts(num_buckets, 0);
+
+    // if input is empty, simply return
+    if (input.size() == 0)
+        return bucket_counts;
+
+    // [1st pass]: counting the number of elements per bucket
+    for (auto it = input.begin(); it != input.end(); ++it) {
+        MXX_ASSERT(0 <= key_func(*it) && key_func(*it) < num_buckets);
+        bucket_counts[key_func(*it)]++;
+    }
+    // get exclusive prefix sum
+    // get offsets of where buckets start (= exclusive prefix sum)
+    // and end (=inclusive prefix sum)
+    std::vector<size_t> offset(bucket_counts.begin(), bucket_counts.end());
+    std::vector<size_t> upper_bound(bucket_counts.begin(), bucket_counts.end());
+    excl_prefix_sum(offset.begin(), offset.end());
+    prefix_sum(offset.begin(), offset.end());
+
+    // in-place bucketing
+    size_t cur_b = 0;
+    for (size_t i = 0; i < input.size();) {
+        // skip full buckets
+        while (cur_b < num_buckets-1 && offset[cur_b] >= upper_bound[cur_b]) {
+            // skip over full buckets
+            i = offset[++cur_b];
+        }
+        // break if all buckets are done
+        if (cur_b >= num_buckets-1)
+            break;
+        size_t target_b = key_func(input[i]);
+        MXX_ASSERT(0 <= target_b && target_b < num_buckets);
+        if (target_b == cur_b) {
+            // item correctly placed
+            ++i;
+        } else {
+            // swap to correct bucket
+            MXX_ASSERT(target_b > cur_b);
+            std::swap(input[i], input[offset[target_b]]);
+        }
+        offset[target_b]++;
+    }
+    return bucket_counts;
+}
 
 /// in place bucketing.  uses an extra vector of same size as msgs.  hops around msgs vector until no movement is possible.
 /// complexity is O(b) * O(n).  scales badly, same as bucketing_copy, but with a factor of 2 for large data.
 /// when fixed n, slight increase with b..  else increases with n.
 template<typename T, typename Func>
-std::vector<size_t> bucketing(std::vector<T>& elements, Func key_func, size_t num_buckets) {
+std::vector<size_t> bucketing_tony(std::vector<T>& elements, Func key_func, size_t num_buckets) {
 
     // number of elements per bucket
     std::vector<size_t> send_counts(num_buckets, 0);
