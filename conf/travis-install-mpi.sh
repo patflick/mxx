@@ -41,7 +41,7 @@ case "$os" in
             openmpi16)
                 #sudo apt-get install -q gfortran openmpi-bin openmpi-common libopenmpi-dev
                 if [ ! -d "$HOME/local/$MPI_IMPL/bin" ]; then
-                    wget http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.bz2
+                    wget --no-check-certificate http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.bz2
                     tar -xjf openmpi-1.6.5.tar.bz2
                     cd openmpi-1.6.5
                     ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
@@ -53,7 +53,7 @@ case "$os" in
             openmpi18)
                 if [ ! -d "$HOME/local/$MPI_IMPL/bin" ]; then
                     mkdir -p openmpi && cd openmpi
-                    wget http://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
+                    wget --no-check-certificate http://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
                     tar -xjf openmpi-1.8.8.tar.bz2
                     cd openmpi-1.8.8
                     ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
