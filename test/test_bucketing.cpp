@@ -28,7 +28,8 @@
 #define START() std::chrono::steady_clock::now()
 #define STOP_MS(x) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - (x)).count()
 
-TEST(MxxAlgos, Bucketing) {
+// TODO: implement actual testing
+TEST(MxxAlgos, BucketingBenchmark) {
     size_t n = 51340200;
     typedef std::tuple<size_t, size_t, size_t> T;
     std::vector<T> input(n);

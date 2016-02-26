@@ -523,10 +523,10 @@ void comm::recv_into(T* buffer, size_t size, int src, int tag) const {
     MXX_ASSERT(buffer != nullptr);
     if (size < mxx::max_int) {
         mxx::datatype dt = mxx::get_datatype<T>();
-        MPI_Recv(const_cast<T*>(buffer), size, dt.type(), src, tag, MPI_STATUS_IGNORE);
+        MPI_Recv(const_cast<T*>(buffer), size, dt.type(), src, tag, this->mpi_comm, MPI_STATUS_IGNORE);
     } else {
         mxx::datatype dt = mxx::get_datatype<T>().contiguous(size);
-        MPI_Recv(const_cast<T*>(buffer), 1, dt.type(), src, tag, MPI_STATUS_IGNORE);
+        MPI_Recv(const_cast<T*>(buffer), 1, dt.type(), src, tag, this->mpi_comm, MPI_STATUS_IGNORE);
     }
 }
 
