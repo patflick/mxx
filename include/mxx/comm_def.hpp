@@ -78,6 +78,7 @@ inline comm comm::split_shared() const {
         // split communicator by hash
         comm hash_comm;
         MPI_Comm_split(this->mpi_comm, h, this->rank(), &hash_comm.mpi_comm);
+	hash_comm.init_ranksize();
 
         // potentially further split in case of hash collisions
         // check if all names are the same per subcomm

@@ -136,6 +136,7 @@ T left_shift(const T& t, const mxx::comm& comm = mxx::comm()) {
     int tag = 15;
 
     T right_value = T();
+    T left_val = t;
     MPI_Request recv_req;
     // if not last processor
     if (comm.rank() < comm.size()-1) {
@@ -145,7 +146,7 @@ T left_shift(const T& t, const mxx::comm& comm = mxx::comm()) {
     // if not first processor
     if (comm.rank() > 0) {
         // send my most right element to the right
-        MPI_Send(const_cast<T*>(&t), 1, dt.type(), comm.rank()-1, tag, comm);
+        MPI_Send(const_cast<T*>(&left_val), 1, dt.type(), comm.rank()-1, tag, comm);
     }
     if (comm.rank() < comm.size()-1) {
         // wait for the async receive to finish
@@ -225,7 +226,8 @@ std::basic_string<CharT> left_shift(const std::basic_string<CharT>& str, const m
     int tag = 15;
     // receive the size first
     std::basic_string<CharT> result;
-    size_t right_size = left_shift(str.size(), comm);
+    size_t str_len = str.size();
+    size_t right_size = left_shift(str_len, comm);
 
     MPI_Request recv_req;
     // if not last processor
