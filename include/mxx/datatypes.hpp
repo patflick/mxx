@@ -486,8 +486,89 @@ datatype get_datatype(const T&) {
     return dt;
 }
 
+
+/*********************************************************************
+ *                      Custom struct datatypes                      *
+ *********************************************************************/
+
+// for each macros from: http://stackoverflow.com/questions/1872220/is-it-possible-to-iterate-over-arguments-in-variadic-macros
+// Make a FOREACH macro
+#define FE_1(WHAT, X) WHAT(X) 
+#define FE_2(WHAT, X, ...) WHAT(X)FE_1(WHAT, __VA_ARGS__)
+#define FE_3(WHAT, X, ...) WHAT(X)FE_2(WHAT, __VA_ARGS__)
+#define FE_4(WHAT, X, ...) WHAT(X)FE_3(WHAT, __VA_ARGS__)
+#define FE_5(WHAT, X, ...) WHAT(X)FE_4(WHAT, __VA_ARGS__)
+#define FE_6(WHAT, X, ...) WHAT(X)FE_5(WHAT, __VA_ARGS__)
+#define FE_7(WHAT, X, ...) WHAT(X)FE_6(WHAT, __VA_ARGS__)
+#define FE_8(WHAT, X, ...) WHAT(X)FE_7(WHAT, __VA_ARGS__)
+#define FE_9(WHAT, X, ...) WHAT(X)FE_8(WHAT, __VA_ARGS__)
+#define FE_10(WHAT, X, ...) WHAT(X)FE_9(WHAT, __VA_ARGS__)
+
+//... repeat as needed
+#define GET_MACRO(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,NAME,...) NAME 
+#define FOR_EACH(action,...) \
+  GET_MACRO(__VA_ARGS__,FE_10,FE_9,FE_8,FE_7,FE_6,FE_5,FE_4,FE_3,FE_2,FE_1)(action,__VA_ARGS__)
+
+#define MXX_DT_PREAMBLE(BASE_TYPE) \
+    MPI_Datatype _type; \
+    BASE_TYPE p; \
+    BASE_TYPE* pt = &p; \
+    MPI_Aint p_adr; \
+    MPI_Get_address(pt, &p_adr); \
+    std::map<MPI_Aint, mxx::datatype> type_map;
+
+#define MXX_DT_MEMBER_DISPLS(member) \
+    MPI_Aint member ## _adr; \
+    MPI_Get_address(&pt-> member, & member ## _adr); \
+    type_map[member ## _adr - p_adr] = get_datatype<decltype(pt-> member )>();
+
+#define MXX_DT_POSTAMBLE(BASE_TYPE) \
+    int num_members = type_map.size(); \
+    std::vector<int> blocklen(num_members, 1); \
+    std::vector<MPI_Datatype> types(num_members); \
+    std::vector<MPI_Aint> displs(num_members); \
+    int i = 0; \
+    for (auto& t : type_map) { \
+      displs[i] = t.first; \
+      types[i] = t.second.type(); \
+      i++; \
+    } \
+    MPI_Datatype struct_type; \
+    MPI_Type_create_struct((num_members), &blocklen[0], &displs[0], &types[0], &struct_type); \
+    MPI_Type_create_resized(struct_type, 0, sizeof( BASE_TYPE ), &_type); \
+    MPI_Type_commit(&_type); \
+    MPI_Type_free(&struct_type); \
+    return _type;
+
+#define MXX_DT_STRUCT_MEMBERS_GET_TYPE(BASE_TYPE, ...) MXX_DT_PREAMBLE(BASE_TYPE); FOR_EACH(MXX_DT_MEMBER_DISPLS, __VA_ARGS__); MXX_DT_POSTAMBLE(BASE_TYPE);
+#define MXX_DT_STRUCT_MEMBER_NUM_BASIC(MEMBER) datatype_builder<decltype(p. MEMBER)>::num_basic_elements()
+#define MXX_DT_STRUCT_MEMBER_ADD_NUM_BASIC(MEMBER) + datatype_builder<decltype(p. MEMBER)>::num_basic_elements()
+
+#define MXX_DT_STRUCT_MEMBERS_NUM_BASIC(BASE_TYPE, FIRST_MEMBER, ...) \
+    static size_t num_basic_elements() { \
+      BASE_TYPE p; \
+      return MXX_DT_STRUCT_MEMBER_NUM_BASIC(FIRST_MEMBER) \
+      FOR_EACH(MXX_DT_STRUCT_MEMBER_ADD_NUM_BASIC, __VA_ARGS__) ;\
+    }
+
+#define MXX_CUSTOM_STRUCT_(BASE_TYPE, ...) \
+struct datatype_builder<BASE_TYPE> { \
+    static MPI_Datatype get_type() { \
+      MXX_DT_STRUCT_MEMBERS_GET_TYPE(BASE_TYPE, __VA_ARGS__); \
+    } \
+    MXX_DT_STRUCT_MEMBERS_NUM_BASIC(BASE_TYPE, __VA_ARGS__); \
+};
+
+#define MXX_CUSTOM_STRUCT(BASE_TYPE, ...) \
+namespace mxx { \
+template <> \
+MXX_CUSTOM_STRUCT_(BASE_TYPE, __VA_ARGS__); \
 } // namespace mxx
 
+
+#define MXX_CUSTOM_TEMPLATE_STRUCT(BASE_TYPE, ...) MXX_CUSTOM_STRUCT_(BASE_TYPE, __VA_ARGS__)
+
+} // namespace mxx
 
 
 #endif // MXX_DATATYPES_HPP
