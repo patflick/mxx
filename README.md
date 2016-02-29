@@ -36,20 +36,22 @@ development, prototyping, and deployment.
 
 ### Planned / TODO
 
-- Parallel random number engines (for use with `C++11` standard library distributions)
-- More parallel (standard) algorithms
-- Wrappers for non-blocking collectives
-- (maybe) serialization/de-serialization of non contiguous data types
-- macros for easy datatype creation and handling for custom/own structs and classes
-- Implementing and tuning different sorting algorithms
-- Communicator classes for different topologies
-- `mxx::env` similar to `boost::mpi::env` for wrapping `MPI_Init` and `MPI_Finalize`
-- Increase test coverage:
+- [ ] Parallel random number engines (for use with `C++11` standard library distributions)
+- [ ] More parallel (standard) algorithms
+- [ ] Wrappers for non-blocking collectives
+- [ ] (maybe) serialization/de-serialization of non contiguous data types
+- [x] macros for easy datatype creation and handling for custom/own structs and classes
+- [ ] Implementing and tuning different sorting algorithms
+- [ ] Communicator classes for different topologies
+- [x] `mxx::env` similar to `boost::mpi::env` for wrapping `MPI_Init` and `MPI_Finalize`
+- [ ] full-code and intro documentations
+- [ ] Increase test coverage:
 ![codecov.io](http://codecov.io/github/patflick/mxx/branch.svg?branch=master)
 
 ### Status
 
-Currently `mxx` is just a small personal project at very early stages.
+Currently `mxx` is a small personal project at early stages, with lots of
+changes still going on. However, feel free to contribute.
 
 ### Examples
 
@@ -151,10 +153,9 @@ your project, and you'll be all set.
 
 ### Dependencies
 
-At this point, `mxx` requires a `C++11` compatible version of `gcc`. Some
-functions still rely on `gcc` specific function calls. `mxx` currently works
-with `MPI-2` and `MPI-3`. However, some collective operations and sorting will
-work on data sizes `>= 2 GB` only with `MPI-3`.
+`mxx` requires a `C++11` compatible compiler.
+`mxx` currently works with `MPI-2` and `MPI-3`.
+However, some collective operations and sorting will work on data sizes `>= 2 GB` only with `MPI-3`.
 
 ### Compiling
 
