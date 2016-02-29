@@ -20,15 +20,15 @@
 
 // only include this file once all three dependencies are fully included
 // i.e. the last of the three will include this file
-#include "shift.hpp"
-#include "collective.hpp"
-#include "reduction.hpp"
-#include "stream.hpp"
 
-#ifdef MXX_STREAM_DONE
+#include "shift.hpp"
 #ifdef MXX_SHIFT_DONE
-#ifdef MXX_COLLECTIVE_DONE
+#include "reduction.hpp"
 #ifdef MXX_REDUCTION_DONE
+#include "collective.hpp"
+#ifdef MXX_COLLECTIVE_DONE
+#include "stream.hpp"
+#ifdef MXX_STREAM_DONE
 
 #ifndef MXX_COMM_DEF_HPP
 #define MXX_COMM_DEF_HPP

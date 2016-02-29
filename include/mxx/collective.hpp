@@ -30,6 +30,7 @@
 #include <limits>
 #include <chrono>
 #include <iostream>
+#include <iomanip>
 
 // mxx includes
 #include "common.hpp"
@@ -1270,20 +1271,24 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
         double max_time = mxx::allreduce(time_all2all, mxx::max<double>(), comm);
         double min_time = mxx::allreduce(time_all2all, mxx::min<double>(), comm);
 
-        size_t global_send = mxx::allreduce(total_send_size, comm);
-        size_t global_recv = mxx::allreduce(total_recv_size, comm);
-        size_t max_send = mxx::allreduce(total_send_size, mxx::max<size_t>(), comm);
-        size_t max_recv = mxx::allreduce(total_recv_size, mxx::max<size_t>(), comm);
-
         size_t bytes_sendrecv = (total_send_size+total_recv_size)*sizeof(T);
         size_t max_sendrecv = mxx::allreduce(bytes_sendrecv, mxx::max<size_t>(), comm);
 
-        // bandwidth in Gb/s
-        double max_bw = 8*max_sendrecv / max_time / 1000.0;
-        // TODO: potentially aggregate BW per node instead of per process
-        //double min_bw = mxx::
-        if (comm.rank() == 0) {
-            std::cout << "[MPI_Alltoallv] Max BW: " << max_bw << " Gb/s\ttime: [" << min_time << "," << max_time << "], max mem: [send=" << max_send*sizeof(T)/1024/1024 << "MiB,recv=" << max_recv*sizeof(T)/1024/1024 << "MiB], max inbalance: [send=" << max_send*comm.size()*1.0/global_send << ",recv=" << max_recv*comm.size()*1.0/global_recv << "]" << std::endl;
+        // output benchmark only if there is the all2all is big enough
+        if (max_sendrecv >= 1024*1024 || max_time >= 100000.0) {
+            size_t global_send = mxx::allreduce(total_send_size, comm);
+            size_t global_recv = mxx::allreduce(total_recv_size, comm);
+            size_t max_send = mxx::allreduce(total_send_size, mxx::max<size_t>(), comm);
+            size_t max_recv = mxx::allreduce(total_recv_size, mxx::max<size_t>(), comm);
+
+            // bandwidth in Gb/s
+            double max_bw = 8*max_sendrecv / max_time / 1000.0;
+            // TODO: potentially aggregate BW per node instead of per process
+            // TODO: ignore self-send data (and/or also same node)
+            if (comm.rank() == 0) {
+                std::cerr << std::fixed << std::setprecision(4) << std::setw(4);
+                std::cerr << "[MPI_Alltoallv] Max BW: " << max_bw << " Gb/s,  time: [" << min_time << "," << max_time << "], max mem: [send=" << max_send*sizeof(T)/1024/1024 << "MiB,recv=" << max_recv*sizeof(T)/1024/1024 << "MiB], max inbalance: [send=" << max_send*comm.size()*1.0/global_send << ",recv=" << max_recv*comm.size()*1.0/global_recv << "]" << std::endl;
+            }
         }
 #endif
     }
