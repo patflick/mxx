@@ -269,7 +269,7 @@ void benchmark_nodes_bw_p2p(const mxx::comm& comm = mxx::comm()) {
      //   mxx::comm smc = sm_comm.split(participate);
 
         if (participate) {
-            //bw_matrix(c, sm_comm);
+            bw_matrix(c, sm_comm);
             bw_all2all(c, sm_comm);
             /*
             if (c.rank() == 0) {
