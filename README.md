@@ -39,11 +39,11 @@ development, prototyping, and deployment.
 - [ ] Parallel random number engines (for use with `C++11` standard library distributions)
 - [ ] More parallel (standard) algorithms
 - [ ] Wrappers for non-blocking collectives
-- [ ] (maybe) serialization/de-serialization of non contiguous data types
-- [x] macros for easy datatype creation and handling for custom/own structs and classes
+- [ ] serialization/de-serialization of non contiguous data types (maybe)
+- [x] ~~macros for easy datatype creation and handling for custom/own structs and classes~~
 - [ ] Implementing and tuning different sorting algorithms
 - [ ] Communicator classes for different topologies
-- [x] `mxx::env` similar to `boost::mpi::env` for wrapping `MPI_Init` and `MPI_Finalize`
+- [x] ~~`mxx::env` similar to `boost::mpi::env` for wrapping `MPI_Init` and `MPI_Finalize`~~
 - [ ] full-code and intro documentations
 - [ ] Increase test coverage:
 ![codecov.io](http://codecov.io/github/patflick/mxx/branch.svg?branch=master)
