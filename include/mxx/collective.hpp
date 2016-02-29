@@ -28,11 +28,14 @@
 #include <mpi.h>
 #include <vector>
 #include <limits>
+#include <chrono>
+#include <iostream>
 
 // mxx includes
 #include "common.hpp"
 #include "datatypes.hpp"
 #include "comm_fwd.hpp"
+#include "reduction.hpp"
 #include "future.hpp"
 #include "big_collective.hpp"
 
@@ -1210,6 +1213,8 @@ std::vector<T> all2all(const std::vector<T>& msgs, const mxx::comm& comm = mxx::
  *                           All-to-all-V                            *
  *********************************************************************/
 
+#define MXX_BENCHMARK_ALL2ALL 1
+
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.
  *
@@ -1252,8 +1257,35 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
         std::vector<int> recv_displs = impl::get_displacements(recv_counts);
         // call regular alltoallv
         mxx::datatype dt = mxx::get_datatype<T>();
+#if MXX_BENCHMARK_ALL2ALL
+        comm.barrier();
+        auto start = std::chrono::steady_clock::now();
+#endif
         MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_displs[0], dt.type(),
                       out, &recv_counts[0], &recv_displs[0], dt.type(), comm);
+#if MXX_BENCHMARK_ALL2ALL
+        auto end = std::chrono::steady_clock::now();
+        // time in microseconds
+        double time_all2all = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        double max_time = mxx::allreduce(time_all2all, mxx::max<double>(), comm);
+        double min_time = mxx::allreduce(time_all2all, mxx::min<double>(), comm);
+
+        size_t global_send = mxx::allreduce(total_send_size, comm);
+        size_t global_recv = mxx::allreduce(total_recv_size, comm);
+        size_t max_send = mxx::allreduce(total_send_size, mxx::max<size_t>(), comm);
+        size_t max_recv = mxx::allreduce(total_recv_size, mxx::max<size_t>(), comm);
+
+        size_t bytes_sendrecv = (total_send_size+total_recv_size)*sizeof(T);
+        size_t max_sendrecv = mxx::allreduce(bytes_sendrecv, mxx::max<size_t>(), comm);
+
+        // bandwidth in Gb/s
+        double max_bw = 8*max_sendrecv / max_time / 1000.0;
+        // TODO: potentially aggregate BW per node instead of per process
+        //double min_bw = mxx::
+        if (comm.rank() == 0) {
+            std::cout << "[MPI_Alltoallv] Max BW: " << max_bw << " Gb/s\ttime: [" << min_time << "," << max_time << "], max mem: [send=" << max_send*sizeof(T)/1024/1024 << "MiB,recv=" << max_recv*sizeof(T)/1024/1024 << "MiB], max inbalance: [send=" << max_send*comm.size()*1.0/global_send << ",recv=" << max_recv*comm.size()*1.0/global_recv << "]" << std::endl;
+        }
+#endif
     }
 }
 
