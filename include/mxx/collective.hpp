@@ -1286,8 +1286,8 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
             // TODO: potentially aggregate BW per node instead of per process
             // TODO: ignore self-send data (and/or also same node)
             if (comm.rank() == 0) {
-                std::cerr << std::fixed << std::setprecision(4) << std::setw(4);
-                std::cerr << "[MPI_Alltoallv] Max BW: " << max_bw << " Gb/s,  time: [" << min_time << "," << max_time << "], max mem: [send=" << max_send*sizeof(T)/1024/1024 << "MiB,recv=" << max_recv*sizeof(T)/1024/1024 << "MiB], max inbalance: [send=" << max_send*comm.size()*1.0/global_send << ",recv=" << max_recv*comm.size()*1.0/global_recv << "]" << std::endl;
+                std::cerr << std::fixed << std::setprecision(2) << std::setw(4);
+                std::cerr << "[MPI_Alltoallv] Max BW: " << max_bw << " Gb/s,  time: [" << min_time/1000.0 << "ms," << max_time/1000.0 << "ms], max mem: [send=" << max_send*sizeof(T)/1024/1024 << "MiB,recv=" << max_recv*sizeof(T)/1024/1024 << "MiB], max inbalance: [send=" << max_send*comm.size()*1.0/global_send << ",recv=" << max_recv*comm.size()*1.0/global_recv << "]" << std::endl;
             }
         }
 #endif
