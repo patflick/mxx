@@ -222,19 +222,19 @@ void distribute(_InIterator begin, _InIterator end, _OutIterator out, const mxx:
         // allgather surpluses
         // TODO figure out how to do surplus send pairing without requiring allgather
         std::vector<impl::signed_size_t> surpluses = mxx::allgather(surplus, comm);
-        MXX_ASSERT(std::accumulate(surpluses.begin(), surpluses.end(), (impl::signed_size_t)0) == 0);
+        MXX_ASSERT(std::accumulate(surpluses.begin(), surpluses.end(), static_cast<impl::signed_size_t>(0)) == 0);
 
         // get send counts
         std::vector<size_t> send_counts = impl::surplus_send_pairing(surpluses, comm.size(), comm.rank(), false);
         std::vector<size_t> recv_counts = mxx::all2all(send_counts, comm);
 
         if (surplus > 0) {
-            MXX_ASSERT(std::accumulate(recv_counts.begin(), recv_counts.end(), (size_t)0) == 0);
+            MXX_ASSERT(std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0)) == 0);
             // TODO: use iterators not pointers
             mxx::all2allv(&(*(begin+((impl::signed_size_t)local_size-surplus))), send_counts, (T*)nullptr, recv_counts, comm);
             std::copy(begin, begin+(local_size-surplus), out);
         } else {
-            MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), (size_t)0) == 0);
+            MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == 0);
             mxx::all2allv((const T*)nullptr, send_counts, &(*(out+local_size)), recv_counts, comm);
             std::copy(begin, end, out);
         }
@@ -316,19 +316,19 @@ struct distribute_container {
             // allgather surpluses
             // TODO figure out how to do surplus send pairing without requiring allgather
             std::vector<impl::signed_size_t> surpluses = mxx::allgather(surplus, comm);
-            MXX_ASSERT(std::accumulate(surpluses.begin(), surpluses.end(), (impl::signed_size_t)0) == 0);
+            MXX_ASSERT(std::accumulate(surpluses.begin(), surpluses.end(), static_cast<impl::signed_size_t>(0)) == 0);
 
             // get send counts
             std::vector<size_t> send_counts = impl::surplus_send_pairing(surpluses, comm.size(), comm.rank(), false);
             std::vector<size_t> recv_counts = mxx::all2all(send_counts, comm);
 
             if (surplus > 0) {
-                MXX_ASSERT(std::accumulate(recv_counts.begin(), recv_counts.end(), (size_t)0) == 0);
+                MXX_ASSERT(std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0)) == 0);
                 // TODO: use iterators not pointers
                 mxx::all2allv(&(*(std::begin(c)+((impl::signed_size_t)local_size-surplus))), send_counts, (T*)nullptr, recv_counts, comm);
                 c.resize(part.local_size());
             } else {
-                MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), (size_t)0) == 0);
+                MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == 0);
                 c.resize(part.local_size());
                 mxx::all2allv((T*)nullptr, send_counts, &(*(std::begin(c)+local_size)), recv_counts, comm);
             }
@@ -437,7 +437,7 @@ void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator o
     // NOTE: this all-gather is what makes the arbitrary decomposition worse
     // in terms of complexity than when assuming a block decomposition
     std::vector<std::size_t> new_local_sizes = mxx::allgather(new_local_size, comm);
-    MXX_ASSERT(std::accumulate(new_local_sizes.begin(), new_local_sizes.end(), 0ull) == total_size);
+    MXX_ASSERT(std::accumulate(new_local_sizes.begin(), new_local_sizes.end(), static_cast<size_t>(0)) == total_size);
 
     // calculate where to send elements
     std::vector<size_t> send_counts(comm.size(), 0);
@@ -522,12 +522,12 @@ _Iterator block_decompose_partitions(_Iterator begin, _Iterator mid, _Iterator e
         return mid;
     std::vector<impl::signed_size_t> surpluses = mxx::allgather(surplus, comm);
 
-    MXX_ASSERT(std::accumulate(surpluses.begin(), surpluses.end(), 0) == 0);
+    MXX_ASSERT(std::accumulate(surpluses.begin(), surpluses.end(), static_cast<size_t>(0)) == 0);
 
     // get send counts
     std::vector<size_t> send_counts = impl::surplus_send_pairing(surpluses, comm.size(), comm.rank(), true);
 
-    std::size_t send_size = std::accumulate(send_counts.begin(), send_counts.end(), 0);
+    std::size_t send_size = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
     std::vector<T> buffer;
     if (send_size > 0)
         buffer.resize(send_size);

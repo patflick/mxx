@@ -613,7 +613,7 @@ TEST(MxxColl, All2allvGeneral) {
             msgs.push_back(std::make_pair(c.rank()*i, 1.0 / rand()));
         }
     }
-    size_t recv_size = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
+    size_t recv_size = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
 
     // send one way
     std::vector<std::pair<int, double> > result = mxx::all2allv(msgs, send_counts, recv_counts, c);
@@ -657,7 +657,7 @@ TEST(MxxColl, All2allvUnknownSize) {
 
     // get the expected receive counts
     std::vector<size_t> actual_recv_count = mxx::all2all(send_counts);
-    size_t recv_size = std::accumulate(actual_recv_count.begin(), actual_recv_count.end(), 0);
+    size_t recv_size = std::accumulate(actual_recv_count.begin(), actual_recv_count.end(), static_cast<size_t>(0));
 
     ASSERT_EQ(recv_size, result.size());
     std::vector<char>::iterator it = result.begin();
