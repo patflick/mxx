@@ -176,7 +176,8 @@ void bw_matrix(const mxx::comm& c, const mxx::comm& smc) {
             std::vector<int> partners = mxx::allgather(partner, c);
             // check correctness of matching
             for (int i = 0; i < c.size(); ++i) {
-                if (partners[partners[i]] != i) {
+                int p = partners[i];
+                if (p < c.size() && partners[p] != i) {
                     std::cout << "wrong partner for i=" << i << " partner[i]=" << partners[i] << "partner[partner[i]] =" << partners[partners[i]] << std::endl;
                 }
             }
@@ -194,18 +195,51 @@ void bw_matrix(const mxx::comm& c, const mxx::comm& smc) {
         mxx::sync_cout(subcomm) << "[" << node_name << "]: " << std::fixed << std::setw(4) << std::setprecision(1) << std::setfill(' ') << bw_row <<  std::endl;
 
         // calculate avg bw per node
+        // calc min and max
         double sum = 0.0;
+        double max = 0.0;
+        double min = 100000;
         for (int i = 0; i < num_nodes; ++i) {
-            if (i != node_idx)
+            if (i != node_idx) {
                 sum += bw_row[i];
+                if (bw_row[i] > max)
+                    max = bw_row[i];
+                if (bw_row[i] < min)
+                    min = bw_row[i];
+            }
         }
+        double global_max_bw = mxx::allreduce(max, mxx::max<double>(), subcomm);
         // output avg bw
-        mxx::sync_cout(subcomm) << "[" << node_name << "]: Average BW: " << sum / (num_nodes-1) << std::endl;
+        mxx::sync_cout(subcomm) << "[" << node_name << "]: Average BW: " << sum / (num_nodes-1) <<  " Gb/s, Max BW: " << max << " Gb/s, Min BW: " << min << " Gb/s" << std::endl;
         // calc overall average
         double allsum = mxx::allreduce(sum, subcomm);
         if (subcomm.rank() == 0) {
-            std::cout << "Overall Average BW: " << allsum / ((num_nodes-1)*(num_nodes-1)) << std::endl;
+            std::cout << "Overall Average BW: " << allsum / ((num_nodes-1)*(num_nodes-1)) << " Gb/s, Max: " << global_max_bw << " Gb/s" << std::endl;
         }
+        // count how many connections are below 50% of max
+        int count_bad = 0;
+        int count_terrible = 0; // below 20%
+        std::vector<int> bad_nodes;
+        std::vector<int> terrible_nodes;
+        for (int i = 0; i < num_nodes; ++i) {
+            if (i != node_idx) {
+                if (bw_row[i] < global_max_bw*0.5) {
+                    ++count_bad;
+                    bad_nodes.push_back(i);
+                }
+                if (bw_row[i] < global_max_bw*0.2) {
+                    ++count_terrible;
+                    terrible_nodes.push_back(i);
+                }
+            }
+        }
+
+        subcomm.with_subset(count_bad > 0, [&](const mxx::comm& outcomm) {
+             mxx::sync_cout(outcomm) << "[" << node_name << "]: " << count_bad << " bad connections (<50% max): " << bad_nodes << std::endl;
+        });
+        subcomm.with_subset(count_terrible > 0, [&](const mxx::comm& outcomm) {
+             mxx::sync_cout(outcomm) << "[" << node_name << "]: " << count_terrible << " terrible connections (<20% max): " << terrible_nodes << std::endl;
+        });
     });
 }
 
