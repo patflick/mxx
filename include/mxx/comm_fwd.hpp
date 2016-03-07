@@ -56,7 +56,8 @@ public:
     comm(const MPI_Comm& c) {
         mpi_comm = c;
         do_free = false;
-        init_ranksize();
+        if (c != MPI_COMM_NULL)
+            init_ranksize();
     }
 
     // disable copying
