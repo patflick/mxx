@@ -1384,7 +1384,8 @@ template <typename T>
 void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
 #if MXX_CHAR_ALL2ALL_ALIGN
     size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), static_cast<size_t>(0));
-    if (sizeof(T) == 1 && total_send_size/comm.size() >= 100) {
+    bool use_align = mxx::any_of(total_send_size/comm.size() >= 100, comm);
+    if (sizeof(T) == 1 && use_align) {
         // align before sending
         char_all2allv(msgs, send_sizes, out, recv_sizes, comm);
     } else {
