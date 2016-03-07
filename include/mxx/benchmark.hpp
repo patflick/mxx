@@ -246,19 +246,7 @@ std::vector<double> pairwise_bw_matrix(const hybrid_comm& hc) {
             else
                 partner_node = partner_block + (inblock_idx + (dist - i)) % dist;
             int partner = partner_node*hc.local.size() + hc.local.rank();
-            // double check partners
-            std::vector<int> partners = mxx::allgather(partner, hc.global);
-            if (hc.global.rank() == 0)
-                std::cout << "Partners=" << partners << std::endl;
-            // check correctness of matching
-            for (int i = 0; i < hc.global.size(); ++i) {
-                int p = partners[i];
-                if (p < hc.global.size() && partners[p] != i) {
-                    std::cout << "wrong partner for i=" << i << " partner[i]=" << partners[i] << "partner[partner[i]] =" << partners[partners[i]] << std::endl;
-                }
-            }
-            //hc.global.with_subset(partner_node < num_nodes, [&](const mxx::comm& subc) {
-                // TODO: need to subtract previous non-participating nodes from partner rank
+            // benchmark duplex with partner
             if (partner_node < num_nodes) {
                 double bw = bw_duplex_per_node(hc.global, partner, hc.local, vec, result);
                 if (hc.is_local_master()) {
@@ -270,7 +258,6 @@ std::vector<double> pairwise_bw_matrix(const hybrid_comm& hc) {
                 // inside the time_duplex function
                 hc.global.barrier();
             }
-            //});
         }
     }
     return bw_row;
@@ -450,6 +437,93 @@ void bw_all2all(const mxx::comm& c, const mxx::comm& smc) {
     }
 }
 
+void bw_all2all_char(const mxx::comm& c, const mxx::comm& smc) {
+    // message size per target processor
+    for (int k = 8; k <= 64; k <<= 1) {
+        int m = k*1024;
+        std::srand(13*c.rank());
+        std::vector<size_t> send_counts(c.size());
+        for (int i = 0; i < c.size(); ++i) {
+            send_counts[i] = m;
+        }
+        size_t n = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+        std::vector<char> els(n);
+        std::generate(els.begin(), els.end(), std::rand);
+        std::vector<size_t> recv_counts = mxx::all2all(send_counts, c);
+        size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+        std::vector<char> rcv(recv_n);
+        mxx::datatype dt = mxx::get_datatype<char>();
+        c.barrier();
+        auto start = std::chrono::steady_clock::now();
+        mxx::all2allv(&els[0], send_counts, &rcv[0], recv_counts, c);
+        //MPI_Alltoall(&els[0], m, dt.type(), &rcv[0], m, dt.type(), c);
+        auto end = std::chrono::steady_clock::now();
+        // time in microseconds
+        double time_all2all = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        double max_time = mxx::allreduce(time_all2all, mxx::max<double>(), c);
+        double min_time = mxx::allreduce(time_all2all, mxx::min<double>(), c);
+        size_t bits_sendrecv = 2*8*sizeof(char)*m*(c.size() - smc.size());
+        // bandwidth in Gb/s
+        double bw = bits_sendrecv / max_time / 1000.0;
+        if (c.rank() == 0) {
+            std::cout << "All2all char bandwidth: " << bw << " Gb/s [min=" << min_time/1000.0 << " ms, max=" << max_time/1000.0 << " ms, local_size=" << bits_sendrecv/1024/1024 << " MiB]" << std::endl;
+        }
+    }
+}
+
+void bw_all2all_unaligned_char(const mxx::comm& c, const mxx::comm& smc, bool realign) {
+    // message size per target processor
+    for (int k = 1; k <= 128; k <<= 1) {
+        int m = k*1024;
+        std::srand(13*c.rank());
+
+        // send counts
+        std::vector<size_t> send_counts(c.size());
+        for (int i = 0; i < c.size(); ++i) {
+            send_counts[i] = m + std::rand() % 8;
+        }
+        size_t n = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+        // generate input
+        std::vector<char> els(n);
+        std::generate(els.begin(), els.end(), std::rand);
+        // original recv counts
+        std::vector<size_t> recv_counts = mxx::all2all(send_counts, c);
+        size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+        std::vector<char> rcv(recv_n);
+
+        // time all2all
+        c.barrier();
+        auto start = std::chrono::steady_clock::now();
+        if (realign) {
+            char_all2allv(&els[0], send_counts, &rcv[0], recv_counts, c);
+        } else {
+            mxx::all2allv(&els[0], send_counts, &rcv[0], recv_counts, c);
+        }
+        //mxx::datatype dt = mxx::get_datatype<char>();
+        //MPI_Alltoall(&els[0], m, dt.type(), &rcv[0], m, dt.type(), c);
+        auto end = std::chrono::steady_clock::now();
+        if (realign) {
+            std::vector<char> rcv2(recv_n);
+            mxx::all2allv(&els[0], send_counts, &rcv2[0], recv_counts, c);
+            if (!(rcv == rcv2)) {
+                std::cout << "[ERROR] Vectors are not same" << std::endl;
+                std::cout << "rcv=" << rcv << std::endl;
+                std::cout << "rcv2=" << rcv2 << std::endl;
+            }
+        }
+        // time in microseconds
+        double time_all2all = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        double max_time = mxx::allreduce(time_all2all, mxx::max<double>(), c);
+        double min_time = mxx::allreduce(time_all2all, mxx::min<double>(), c);
+        size_t bits_sendrecv = 2*8*sizeof(char)*m*(c.size() - smc.size());
+        // bandwidth in Gb/s
+        double bw = bits_sendrecv / max_time / 1000.0;
+        if (c.rank() == 0) {
+            std::cout << "All2all UNaligned char bandwidth: " << bw << " Gb/s [min=" << min_time/1000.0 << " ms, max=" << max_time/1000.0 << " ms, local_size=" << bits_sendrecv/1024/1024 << " MiB]" << std::endl;
+        }
+    }
+}
+
 void benchmark_nodes_bw_p2p(const mxx::comm& comm = mxx::comm()) {
     // pair with another node
     hybrid_comm hc(comm);
@@ -488,6 +562,11 @@ void benchmark_nodes_bw_p2p(const mxx::comm& comm = mxx::comm()) {
             hc.with_nodes(part, [&](const hybrid_comm& subhc) {
                 bw_all2all(subhc.global, subhc.local);
             });
+            bw_all2all_char(hc.global, hc.local);
+            bw_all2all_unaligned_char(hc.global, hc.local, false);
+            if (hc.global.rank() == 0)
+                std::cout << "== With re-alignment" << std::endl;
+            bw_all2all_unaligned_char(hc.global, hc.local, true);
             write_new_nodefile(hc, part, "blah.nodes");
 
 
