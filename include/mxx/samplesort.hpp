@@ -273,7 +273,7 @@ std::vector<size_t> split(_Iterator begin, _Iterator end, _Compare comp, const s
     // send last elements to last processor
     std::size_t out_size = std::distance(pos, end);
     send_counts[comm.size() - 1] += out_size;
-    MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), 0ull) == local_size);
+    MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == local_size);
     return send_counts;
 }
 
@@ -323,7 +323,7 @@ std::vector<size_t> stable_split(_Iterator begin, _Iterator end, _Compare comp, 
     // send last elements to last processor
     std::size_t out_size = std::distance(pos, end);
     send_counts[comm.size() - 1] += out_size;
-    MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), 0ull) == local_size);
+    MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == local_size);
     return send_counts;
 }
 
@@ -399,7 +399,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, MPI_Datatype mpi_
 
 
     std::vector<size_t> recv_counts = mxx::all2all(send_counts, comm);
-    std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), 0ull);
+    std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
     // TODO: use different approach if there are less than p local elements
     MXX_ASSERT(!_AssumeBlockDecomp || (local_size <= (size_t)p || recv_n <= 2* local_size));
     std::vector<value_type> recv_elements(recv_n);
