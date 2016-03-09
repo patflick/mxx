@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Georgia Institute of Technology
+ * Copyright 2016 Georgia Institute of Technology
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /**
- * @file    benchmarks.hpp
+ * @file    benchmark.hpp
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements some MPI bandwidth benchmarks.
  */
@@ -166,9 +166,6 @@ double time_duplex(const mxx::comm& c, int partner, const std::vector<T>& sendve
     auto end = std::chrono::steady_clock::now();
     double time_p2p = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    //std::string node_name = get_processor_name();
-    //mxx::sync_cout(c) << "[" << node_name << "] time: " << time_p2p << std::endl;
-
     // calculate duplex bandwidth
     //double bw = 2*8*(double)n*sizeof(size_t)/time_p2p/1000.0;
     return time_p2p;
@@ -200,9 +197,6 @@ void bm(const mxx::comm& c, int partner, const mxx::comm& smc) {
     std::tie(bw_send, bw_recv) = bw_simplex(c, partner, n);
 
     // calculate BW
-    //double max_bw = mxx::allreduce(bw, mxx::max<double>(), smc);
-    //double min_bw = mxx::allreduce(bw, mxx::min<double>(), smc);
-    //double sum_bwd = mxx::allreduce(bwd, std::plus<double>(), smc);
     double maxtime_duplex = mxx::allreduce(timed, mxx::max<double>(), smc);
     double sum_bwd = 2*8*n*sizeof(size_t)*smc.size()/maxtime_duplex/1000.0;
     double sum_bw_send = mxx::allreduce(bw_send, std::plus<double>(), smc);
@@ -266,6 +260,7 @@ std::vector<double> pairwise_bw_matrix(const hybrid_comm& hc) {
 void print_bw_matrix_stats(const hybrid_comm& hc, const std::vector<double>& bw_row) {
     // print matrix
     hc.with_local_master([&](){
+        // print matrix:
         mxx::sync_cout(hc.local_master) << "[" << hc.node_name << "]: " << std::fixed << std::setw(4) << std::setprecision(1) << std::setfill(' ') << bw_row <<  std::endl;
 
         // calculate avg bw per node
@@ -406,11 +401,6 @@ void write_new_nodefile(const hybrid_comm& hc, bool participate, const std::stri
     });
 }
 
-// my own hierarchical all2all using MPI_Sendrecv with all pairs of _nodes_
-template <typename T>
-void myall2all(const T* send, const T* recv, size_t send_count, const mxx::comm& comm) {
-    mxx::datatype dt = mxx::get_datatype<size_t>();
-}
 
 void bw_all2all(const mxx::comm& c, const mxx::comm& smc) {
     // message size per target processor
@@ -561,14 +551,13 @@ void benchmark_nodes_bw_p2p(const mxx::comm& comm = mxx::comm()) {
                 std::cout << "After vote off: " << std::endl;
             hc.with_nodes(part, [&](const hybrid_comm& subhc) {
                 bw_all2all(subhc.global, subhc.local);
+                bw_all2all_char(subhc.global, subhc.local);
+                bw_all2all_unaligned_char(subhc.global, subhc.local, false);
+                if (subhc.global.rank() == 0)
+                    std::cout << "== With re-alignment" << std::endl;
+                bw_all2all_unaligned_char(subhc.global, subhc.local, true);
             });
-            bw_all2all_char(hc.global, hc.local);
-            bw_all2all_unaligned_char(hc.global, hc.local, false);
-            if (hc.global.rank() == 0)
-                std::cout << "== With re-alignment" << std::endl;
-            bw_all2all_unaligned_char(hc.global, hc.local, true);
             write_new_nodefile(hc, part, "blah.nodes");
-
 
             /*
             if (c.rank() == 0) {

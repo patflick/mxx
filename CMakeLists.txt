@@ -74,3 +74,4 @@ include_directories("${PROJECT_SOURCE_DIR}")
 # build tests
 add_subdirectory(gtest)
 add_subdirectory(test)
+add_subdirectory(src)

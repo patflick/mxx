@@ -24,6 +24,9 @@
 #define MXX_ENV_HPP
 
 #include <mpi.h>
+#include <exception>
+#include <stdexcept>
+#include <string>
 
 namespace mxx {
 
