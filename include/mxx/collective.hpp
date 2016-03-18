@@ -1214,6 +1214,7 @@ std::vector<T> all2all(const std::vector<T>& msgs, const mxx::comm& comm = mxx::
  *                           All-to-all-V                            *
  *********************************************************************/
 
+#define MXX_CHAR_ALL2ALL_ALIGN 1
 #define MXX_BENCHMARK_ALL2ALL 1
 
 /**
@@ -1230,17 +1231,21 @@ std::vector<T> all2all(const std::vector<T>& msgs, const mxx::comm& comm = mxx::
  *
  * @see MPI_Alltoallv
  *
- * @tparam T        The data type of the elements.
- * @param msgs      Pointer to memory containing the elements to be send.
+ * @tparam T            The data type of the elements.
+ * @param msgs          Pointer to memory containing the elements to be send.
  * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
  *                      the number of elements to be send to each of the processes.
- * @param out       Pointer to memory for writing the received messages.
+ * @param send_displs   Offsets (in number of elements) of where each
+ *                      message starts for each process.
+ * @param out           Pointer to memory for writing the received messages.
  * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
  *                      the number of elements to be received from each process.
- * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ * @param recv_displs   Offsets (in number of elements) of where each
+ *                      message should be received for each process.
+ * @param comm          The communicator (`comm.hpp`). Defaults to `world`.
  */
 template <typename T>
-void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& send_displs, T* out, const std::vector<size_t>& recv_sizes, const std::vector<size_t>& recv_displs, const mxx::comm& comm = mxx::comm()) {
     size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), static_cast<size_t>(0));
     size_t total_recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), static_cast<size_t>(0));
     size_t local_max_size = std::max(total_send_size, total_recv_size);
@@ -1248,22 +1253,22 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
     size_t max;
     MPI_Allreduce(&local_max_size, &max, 1, mpi_sizet.type(), MPI_MAX, comm);
     if (max >= mxx::max_int) {
-        impl::all2allv_big(msgs, send_sizes, out, recv_sizes, comm);
+        impl::all2allv_big(msgs, send_sizes, send_displs, out, recv_sizes, recv_displs, comm);
     } else {
         // convert vectors to integer counts
         std::vector<int> send_counts(send_sizes.begin(), send_sizes.end());
         std::vector<int> recv_counts(recv_sizes.begin(), recv_sizes.end());
         // get displacements
-        std::vector<int> send_displs = impl::get_displacements(send_counts);
-        std::vector<int> recv_displs = impl::get_displacements(recv_counts);
+        std::vector<int> send_dis(send_displs.begin(), send_displs.end());
+        std::vector<int> recv_dis(recv_displs.begin(), recv_displs.end());
         // call regular alltoallv
         mxx::datatype dt = mxx::get_datatype<T>();
 #if MXX_BENCHMARK_ALL2ALL
         comm.barrier();
         auto start = std::chrono::steady_clock::now();
 #endif
-        MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_displs[0], dt.type(),
-                      out, &recv_counts[0], &recv_displs[0], dt.type(), comm);
+        MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_dis[0], dt.type(),
+                      out, &recv_counts[0], &recv_dis[0], dt.type(), comm);
 #if MXX_BENCHMARK_ALL2ALL
         auto end = std::chrono::steady_clock::now();
         // time in microseconds
@@ -1294,29 +1299,107 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, cons
     }
 }
 
+/**
+ * @brief   Character All-to-all which first fixes alignment for better performance.
+ *
+ * This version is a workaround/fix for badly performing character all2alls
+ * for when the different messages are not aligned the same on the sending
+ * and receiving part
+ *
+ * @see MPI_Alltoallv
+ *
+ * @tparam T            The data type of the elements.
+ * @param msgs          Pointer to memory containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param out           Pointer to memory for writing the received messages.
+ * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be received from each process.
+ * @param comm          The communicator (`comm.hpp`). Defaults to `world`.
+ */
 template <typename T>
-void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const std::vector<size_t>& send_displs, T* out, const std::vector<size_t>& recv_sizes, const std::vector<size_t>& recv_displs, const mxx::comm& comm = mxx::comm()) {
-    size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), static_cast<size_t>(0));
-    size_t total_recv_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), static_cast<size_t>(0));
-    size_t local_max_size = std::max(total_send_size, total_recv_size);
-    mxx::datatype mpi_sizet = mxx::get_datatype<size_t>();
-    size_t max;
-    MPI_Allreduce(&local_max_size, &max, 1, mpi_sizet.type(), MPI_MAX, comm);
-    if (max >= mxx::max_int) {
-        impl::all2allv_big(msgs, send_sizes, send_displs, out, recv_sizes, recv_displs, comm);
-    } else {
-        // convert vectors to integer counts
-        std::vector<int> send_counts(send_sizes.begin(), send_sizes.end());
-        std::vector<int> recv_counts(recv_sizes.begin(), recv_sizes.end());
-        // get displacements
-        std::vector<int> send_dis(send_displs.begin(), send_displs.end());
-        std::vector<int> recv_dis(recv_displs.begin(), recv_displs.end());
-        // call regular alltoallv
-        mxx::datatype dt = mxx::get_datatype<T>();
-        MPI_Alltoallv(const_cast<T*>(msgs), &send_counts[0], &send_dis[0], dt.type(),
-                      out, &recv_counts[0], &recv_dis[0], dt.type(), comm);
+void char_all2allv(const T* in, const std::vector<size_t>& send_counts, T* out, const std::vector<size_t>& recv_counts, const mxx::comm& c) {
+    std::vector<size_t> displs = impl::get_displacements(send_counts);
+    std::vector<size_t> counts(send_counts);
+    std::vector<unsigned int> offsets(c.size(), 0);
+    // increase the size of the message and decrease the displacements
+    // so that each message is aligned to `align`
+    size_t align = 8;
+    for (int i = 0; i < c.size(); ++i) {
+        // round dipls down to next align
+        if (i > 0 && displs[i] % align != 0) {
+            offsets[i] = displs[i] % align;
+            displs[i] -= offsets[i];
+            counts[i] += offsets[i];
+        }
+        // round up to next align
+        if (i+1 < c.size() && counts[i] % align != 0) {
+            counts[i] += align - (counts[i] % align);
+        }
+    }
+
+    // calculate new all2all parameters
+    std::vector<unsigned int> recv_offsets = mxx::all2all(offsets, c);
+    std::vector<size_t> aligned_recv_counts = mxx::all2all(counts, c);
+    std::vector<size_t> aligned_recv_displs = impl::get_displacements(aligned_recv_counts);
+    size_t aligned_recv_size = std::accumulate(aligned_recv_counts.begin(), aligned_recv_counts.end(), static_cast<size_t>(0));
+    std::vector<T> recv_buffer(aligned_recv_size);
+
+    // call all2allv with custom displacements
+    mxx::all2allv(in, counts, displs, &recv_buffer[0], aligned_recv_counts, aligned_recv_displs, c);
+
+    // fix offsets and copy into real recv buffer
+    T* o = out;
+    for (int i = 0; i < c.size(); ++i) {
+        const T* it = &recv_buffer[0]+aligned_recv_displs[i]+recv_offsets[i];
+        std::copy(it, it + recv_counts[i], o);
+        o += recv_counts[i];
     }
 }
+
+/**
+ * @brief   All-to-all message exchange between all processes in the communicator.
+ *
+ * This function if for the case that the number of elements send to and received
+ * from each process is not always the same, such that `all2all()` can not
+ * be used.
+ *
+ * The number of elements send to each process from this process are given
+ * by the parameter `send_sizes`.
+ * The number of elements received from each process to this process are given
+ * by the parameter `recv_sizes`.
+ *
+ * @see MPI_Alltoallv
+ *
+ * @tparam T        The data type of the elements.
+ * @param msgs      Pointer to memory containing the elements to be send.
+ * @param send_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be send to each of the processes.
+ * @param out       Pointer to memory for writing the received messages.
+ * @param recv_sizes    A `std::vector` of size `comm.size()`, this contains
+ *                      the number of elements to be received from each process.
+ * @param comm      The communicator (`comm.hpp`). Defaults to `world`.
+ */
+template <typename T>
+void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, T* out, const std::vector<size_t>& recv_sizes, const mxx::comm& comm = mxx::comm()) {
+#if MXX_CHAR_ALL2ALL_ALIGN
+    size_t total_send_size = std::accumulate(send_sizes.begin(), send_sizes.end(), static_cast<size_t>(0));
+    bool use_align = mxx::any_of(total_send_size/comm.size() >= 100, comm);
+    if (sizeof(T) == 1 && use_align) {
+        // align before sending
+        char_all2allv(msgs, send_sizes, out, recv_sizes, comm);
+    } else {
+#endif
+        // get displacements
+        std::vector<size_t> send_displs = impl::get_displacements(send_sizes);
+        std::vector<size_t> recv_displs = impl::get_displacements(recv_sizes);
+        // call more specialized all2allv
+        all2allv(msgs, send_sizes, send_displs, out, recv_sizes, recv_displs, comm);
+#if MXX_CHAR_ALL2ALL_ALIGN
+    }
+#endif
+}
+
 
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.

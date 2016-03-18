@@ -3,30 +3,30 @@ cmake_minimum_required(VERSION 2.6)
 # project settings
 project(mxx-test)
 
-add_executable(test-collective test_collective.cpp)
-target_link_libraries(test-collective mxx-gtest-main)
+add_executable(mxx-test-collective test_collective.cpp)
+target_link_libraries(mxx-test-collective mxx-gtest-main)
 
-add_executable(test-reductions test_reductions.cpp)
-target_link_libraries(test-reductions mxx-gtest-main)
+add_executable(mxx-test-reductions test_reductions.cpp)
+target_link_libraries(mxx-test-reductions mxx-gtest-main)
 
-add_executable(test-send test_send.cpp)
-target_link_libraries(test-send mxx-gtest-main)
+add_executable(mxx-test-send test_send.cpp)
+target_link_libraries(mxx-test-send mxx-gtest-main)
 
-add_executable(test-sort test_sort.cpp)
-target_link_libraries(test-sort mxx-gtest-main)
+add_executable(mxx-test-sort test_sort.cpp)
+target_link_libraries(mxx-test-sort mxx-gtest-main)
 
-add_executable(test-distribution test_distribution.cpp)
-target_link_libraries(test-distribution mxx-gtest-main)
+add_executable(mxx-test-distribution test_distribution.cpp)
+target_link_libraries(mxx-test-distribution mxx-gtest-main)
 
-add_executable(benchmarks benchmarks.cpp)
-target_link_libraries(benchmarks mxx-gtest-main)
+add_executable(mxx-benchmarks benchmarks.cpp)
+target_link_libraries(mxx-benchmarks mxx-gtest-main)
 
 # TODO: sequential tests should use different main
-add_executable(test-bucketing test_bucketing.cpp)
-target_link_libraries(test-bucketing mxx-gtest-main)
+add_executable(mxx-test-bucketing test_bucketing.cpp)
+target_link_libraries(mxx-test-bucketing mxx-gtest-main)
 
-add_executable(test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
-target_link_libraries(test-all mxx-gtest-main)
+add_executable(mxx-test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
+target_link_libraries(mxx-test-all mxx-gtest-main)
 
 ################
 #  Old tests:  #
