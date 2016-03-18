@@ -32,6 +32,7 @@
 #include <mutex>
 #include <atomic>
 #include <assert.h> // TODO: replace with own assert (calling MPI_Abort)
+#include <cstring> // for memcpy
 
 // mxx includes
 #include "datatypes.hpp"
@@ -277,12 +278,12 @@ private:
         T inout_buf;
         MPI_Aint true_extent, true_lb;
         MPI_Type_get_true_extent(*dt, &true_lb, &true_extent);
-        memcpy((char*)&in_buf+true_lb, (char*)invec+(sizeof(T)*(*len-1))+true_lb, true_extent);
-        memcpy((char*)&inout_buf+true_lb, (char*)inoutvec+(sizeof(T)*(*len-1))+true_lb, true_extent);
+        std::memcpy((char*)&in_buf+true_lb, (char*)invec+(sizeof(T)*(*len-1)), true_extent);
+        std::memcpy((char*)&inout_buf+true_lb, (char*)inoutvec+(sizeof(T)*(*len-1)), true_extent);
         // now do the operation on our local buffers
         inout_buf = func(in_buf, inout_buf);
         // copy the results back, again only to true_extent
-        memcpy((char*)inoutvec+(sizeof(T)*(*len - 1))+true_lb, (char*)&inout_buf+true_lb, true_extent);
+        std::memcpy((char*)inoutvec+(sizeof(T)*(*len - 1)), (char*)&inout_buf+true_lb, true_extent);
     }
     // MPI custom Op function: (of type MPI_User_function)
     // This function is called from within MPI
