@@ -92,7 +92,7 @@ public:
                 func(*this);
             }
         } else {
-            hybrid_comm hc(std::move(split_by_node(participate)));
+            hybrid_comm hc(split_by_node(participate));
             if (participate) {
                 func(hc);
             }
