@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
 
     mxx::env e(argc, argv);
+    mxx::env::set_exception_on_error();
     mxx::comm c = mxx::comm();
     //MPI_Init(&argc, &argv);
 
