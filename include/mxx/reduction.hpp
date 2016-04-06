@@ -32,6 +32,7 @@
 #include <mutex>
 #include <atomic>
 #include <assert.h> // TODO: replace with own assert (calling MPI_Abort)
+#include <cstring> // for memcpy
 
 // mxx includes
 #include "datatypes.hpp"
@@ -206,7 +207,7 @@ public:
             // create user function
             using namespace std::placeholders;
             m_user_func = std::bind(custom_op::custom_function<Func>,
-                                  std::forward<Func>(func), _1, _2, _3);
+                                  std::forward<Func>(func), _1, _2, _3, _4);
             // get datatype associated with the type `T`
             mxx::datatype dt = mxx::get_datatype<T>();
             // attach function to a copy of the datatype
@@ -262,24 +263,38 @@ private:
     // is bound to this function via std::bind, and the resulting object
     // saved in the MPI_Datatype
     template <typename Func>
-    static void custom_function(Func func, void* invec, void* inoutvec, int* len) {
-        T* in = (T*) invec;
-        T* inout = (T*) inoutvec;
-        for (int i = 0; i < *len; ++i) {
-            inout[i] = func(in[i], inout[i]);
+    static void custom_function(Func func, void* invec, void* inoutvec, int* len, MPI_Datatype* dt) {
+        if (*len > 1) {
+            T* in = (T*) invec;
+            T* inout = (T*) inoutvec;
+            for (int i = 0; i < *len-1; ++i) {
+                inout[i] = func(in[i], inout[i]);
+            }
         }
+        // only read and write the `true_extent` of the datatype
+        // for the last item (otherwise we might encounter a memory error)
+        // [see github OpenMPI issue #1462]
+        T in_buf;
+        T inout_buf;
+        MPI_Aint true_extent, true_lb;
+        MPI_Type_get_true_extent(*dt, &true_lb, &true_extent);
+        std::memcpy((char*)&in_buf+true_lb, (char*)invec+(sizeof(T)*(*len-1)), true_extent);
+        std::memcpy((char*)&inout_buf+true_lb, (char*)inoutvec+(sizeof(T)*(*len-1)), true_extent);
+        // now do the operation on our local buffers
+        inout_buf = func(in_buf, inout_buf);
+        // copy the results back, again only to true_extent
+        std::memcpy((char*)inoutvec+(sizeof(T)*(*len - 1)), (char*)&inout_buf+true_lb, true_extent);
     }
     // MPI custom Op function: (of type MPI_User_function)
     // This function is called from within MPI
     static void mpi_user_function(void* in, void* inout, int* n, MPI_Datatype* dt) {
         // get the std::function from the MPI_Datatype and call it
-        typedef std::function<void(void*,void*,int*)> func_t;
         func_t f = attr_map<int, func_t>::get(*dt, 1347);
-        f(in, inout, n);
+        f(in, inout, n, dt);
     }
 
     // the std::function user function wrapper, which is called from the mpi user function
-    typedef std::function<void(void*,void*,int*)> func_t;
+    typedef std::function<void(void*,void*,int*, MPI_Datatype*)> func_t;
     func_t m_user_func;
     /// Whether the MPI_Op is a builtin operator (e.g. MPI_SUM)
     bool m_builtin;
