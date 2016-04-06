@@ -97,14 +97,15 @@ public:
         time_rep elapsed = duration(stop-start).count();
         // TODO: reduce rather than allreduce
         // TODO: use single reduction with custom operator
-        time_rep min = mxx::allreduce(elapsed, [](time_rep x, time_rep y){return std::min(x,y);}, comm);
-        time_rep max = mxx::allreduce(elapsed, [](time_rep x, time_rep y){return std::max(x,y);}, comm);
-        time_rep sum = mxx::allreduce(elapsed, std::plus<time_rep>(), comm);
+        double delapsed = elapsed;
+        double min = mxx::allreduce(delapsed, mxx::min<double>(), comm);
+        double max = mxx::allreduce(delapsed, mxx::max<double>(), comm);
+        double sum = mxx::allreduce(delapsed, std::plus<time_rep>(), comm);
         // calc mean:
         int p, rank;
         MPI_Comm_rank(comm, &rank);
         MPI_Comm_size(comm, &p);
-        time_rep mean = sum / (double)p;
+        double mean = sum / (double)p;
         // only root process outputs the timings
         if (rank == root)
             ostr << std::setprecision(3) << std::scientific << "TIMER" << sep << min << sep << mean << sep << max << sep << depth << sep << name << std::endl;
