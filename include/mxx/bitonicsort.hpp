@@ -47,7 +47,7 @@ void bitonic_split(_Iterator begin, _Iterator end, _Compare comp, const mxx::com
 
     // send/recv
     mxx::datatype dt = mxx::get_datatype<T>();
-    MPI_Sendrecv(const_cast<const T*>(&*begin), np, dt.type(), partner, 0,
+    MPI_Sendrecv(&*begin, np, dt.type(), partner, 0,
                  &recv_buf[0], np, dt.type(), partner, 0, comm, MPI_STATUS_IGNORE);
 
     // merge in `dir` direction into merge buffer
