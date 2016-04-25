@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 #include <mxx/sort.hpp>
+#include <mxx/bitonicsort.hpp>
 #include <mxx/shift.hpp>
 #include <mxx/stream.hpp>
 
@@ -50,6 +51,33 @@ TEST(MxxSort, SampleSort1) {
     ASSERT_EQ(true, sorted);
 
 }
+
+TEST(MxxSort, BitonicSort1) {
+    mxx::comm c;
+    // simple sorting test with same number of elements for each processor
+    std::vector<int> vec(250);
+    srand(133*c.rank());
+    std::generate(vec.begin(), vec.end(), [](){ return std::rand() % 100;});
+
+    // sort
+    mxx::bitonic_sort(vec.begin(), vec.end(), std::less<int>(), c);
+
+    // should be locally sorted
+    ASSERT_TRUE(std::is_sorted(vec.begin(), vec.end()));
+
+    // first element on each proc should be larger or equal to last one on
+    // previous processor
+    int prev = mxx::right_shift(vec.back(), c);
+    if (c.rank() > 0) {
+        ASSERT_TRUE(prev <= vec.front());
+    }
+
+    // assume is sorted
+    bool sorted = mxx::is_sorted(vec.begin(), vec.end(), std::less<int>(), c);
+    ASSERT_EQ(true, sorted);
+}
+
+
 
 TEST(MxxSort, SampleSortInbalanced) {
     mxx::comm c;
@@ -105,10 +133,6 @@ TEST(MxxSort, StableSort) {
     // stably sort only by second index
     mxx::stable_sort(vec.begin(), vec.end(), snd_cmp, c);
 
-    //c.exlusively_in_order_do([&]() {
-    //    std::cout << "[Rank " << c.rank() << "]: " << vec << std::endl;
-    //});
-
     // assert it is sorted lexicographically by both (second, first)
     auto full_cmp = [](const tuple_t& x, const tuple_t& y) {
         return std::get<2>(x) < std::get<2>(y) || (std::get<2>(x) == std::get<2>(y) && std::get<1>(x) < std::get<1>(y));
@@ -125,8 +149,6 @@ TEST(MxxSort, Unique) {
     mxx::sort(vec.begin(), vec.end());
     std::vector<int>::iterator newend = mxx::unique(vec.begin(), vec.end());
     std::vector<int> unique_els(vec.begin(), newend);
-
-    mxx::sync_cout(c) << "[Rank " << c.rank() << "]: Found " << unique_els.size() << " unique elements: " << unique_els << std::endl;
 
     std::vector<int> all = mxx::allgatherv(unique_els);
     ASSERT_EQ(10ul, all.size());
