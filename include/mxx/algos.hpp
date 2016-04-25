@@ -228,7 +228,7 @@ std::vector<size_t> bucketing(std::vector<T>& input, Func key_func, size_t num_b
 
     // [1st pass]: counting the number of elements per bucket
     for (auto it = input.begin(); it != input.end(); ++it) {
-        MXX_ASSERT(0 <= key_func(*it) && key_func(*it) < num_buckets);
+        MXX_ASSERT(0 <= key_func(*it) && (size_t)key_func(*it) < num_buckets);
         bucket_counts[key_func(*it)]++;
     }
 
@@ -278,7 +278,7 @@ std::vector<size_t> bucketing_inplace(std::vector<T>& input, Func key_func, size
 
     // [1st pass]: counting the number of elements per bucket
     for (auto it = input.begin(); it != input.end(); ++it) {
-        MXX_ASSERT(0 <= key_func(*it) && key_func(*it) < num_buckets);
+        MXX_ASSERT(0 <= key_func(*it) && (size_t)key_func(*it) < num_buckets);
         bucket_counts[key_func(*it)]++;
     }
     // get exclusive prefix sum
