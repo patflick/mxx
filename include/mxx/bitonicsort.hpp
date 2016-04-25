@@ -153,7 +153,7 @@ void bitonic_sort_rec(_Iterator begin, _Iterator end, _Compare comp, const mxx::
 template <typename _Iterator, typename _Compare>
 void bitonic_sort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& comm) {
     size_t np = std::distance(begin, end);
-    if (!mxx::all_same(np)) {
+    if (!mxx::all_same(np, comm)) {
         throw std::runtime_error("bitonic sort only works for the same number of elements on each process.");
     }
 
