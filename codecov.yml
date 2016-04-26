@@ -1,0 +1,10 @@
+comment:
+  layout: header, changes, diff, sunburst
+coverage:
+  ignore:
+  - test/.*
+  - ext
+  - gtest
+  status:
+    patch:
+      default: {}
