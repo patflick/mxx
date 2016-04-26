@@ -53,7 +53,7 @@ endif(DOXYGEN_FOUND)
 ### Test Coverage
 OPTION(ENABLE_COVERAGE "Enable code coverage reporting" OFF)
 if(ENABLE_COVERAGE)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fno-stack-protector")
 endif(ENABLE_COVERAGE)
 
 ### Fake BIG MPI for testing of BigMPI functions on travis or other small RAM
