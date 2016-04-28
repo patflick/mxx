@@ -3,12 +3,9 @@ codecov:
 
 coverage:
   ignore:
-  - test
-  - ext
-  - gtest
-  status:
-    patch:
-      default: {}
+    - test
+    - ext
+    - gtest
 
 comment:
   layout: "header, diff, changes"
