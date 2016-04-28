@@ -62,8 +62,8 @@ before_script:
     # prepare build mxx
     - mkdir build
     - cd build
-    - if [ -z "$FAKEBIG" ]; then cmake -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../;
-      else cmake -DFAKE_BIG_MPI=ON -DENABLE_COVERAGE=ON -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../; fi
+    - if [ -z "$FAKEBIG" ]; then cmake -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../;
+      else cmake -DFAKE_BIG_MPI=ON -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../; fi
 
 script:
     # build mxx and run tests
