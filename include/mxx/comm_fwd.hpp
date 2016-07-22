@@ -547,6 +547,7 @@ inline std::basic_string<CharT, Traits, Alloc> comm::recv_str(size_t size, int s
     std::basic_string<CharT, Traits, Alloc> result;
     result.resize(size);
     this->recv_into(&result[0], size, src, tag);
+    return result;
 }
 
 /***********
