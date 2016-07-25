@@ -37,6 +37,7 @@
 #include "datatypes.hpp"
 #include "comm_fwd.hpp"
 #include "reduction.hpp"
+#include "bcast.hpp"
 #include "future.hpp"
 #include "big_collective.hpp"
 
@@ -196,8 +197,7 @@ template <typename T>
 std::vector<T> scatter(const std::vector<T>& msgs, int root, const mxx::comm& comm = mxx::comm()) {
     size_t size = msgs.size() / comm.size();
     MXX_ASSERT(comm.rank() != 0 || msgs.size() % (size_t)comm.size() == 0);
-    mxx::datatype sizedt = mxx::get_datatype<size_t>();
-    MPI_Bcast(&size, 1, sizedt.type(), root, comm);
+    mxx::bcast(size, root, comm);
     // now everybody knows the size
     std::vector<T> result = scatter(msgs, size, root, comm);
     return result;
@@ -223,8 +223,7 @@ std::vector<T> scatter(const std::vector<T>& msgs, int root, const mxx::comm& co
 template <typename T>
 std::vector<T> scatter_recv(int root, const mxx::comm& comm = mxx::comm()) {
     size_t size;
-    mxx::datatype sizedt = mxx::get_datatype<size_t>();
-    MPI_Bcast(&size, 1, sizedt.type(), root, comm);
+    mxx::bcast(size, root, comm);
     // now everybody knows the size
     std::vector<T> result = scatter_recv<T>(size, root, comm);
     return result;
@@ -323,8 +322,7 @@ void scatterv(const T* msgs, const std::vector<size_t>& sizes, T* out, size_t re
     MXX_ASSERT(root != comm.rank() || sizes.size() == static_cast<size_t>(comm.size()));
     // get total send size
     size_t send_size = std::accumulate(sizes.begin(), sizes.end(), static_cast<size_t>(0));
-    mxx::datatype sizedt = mxx::get_datatype<size_t>();
-    MPI_Bcast(&send_size, 1, sizedt.type(), root, comm);
+    mxx::bcast(send_size, root, comm);
     // check if we need to use the custom BIG scatterv
     if (send_size >= mxx::max_int) {
         // own scatter for large messages
@@ -702,9 +700,7 @@ std::vector<T> gather(const T& x, int root, const mxx::comm& comm = mxx::comm())
 template <typename T>
 void gatherv(const T* data, size_t size, T* out, const std::vector<size_t>& recv_sizes, int root, const mxx::comm& comm = mxx::comm()) {
     size_t total_size = std::accumulate(recv_sizes.begin(), recv_sizes.end(), static_cast<size_t>(0));
-    mxx::datatype mpi_sizet = mxx::get_datatype<size_t>();
-    // tell everybody about the total size
-    MPI_Bcast(&total_size, 1, mpi_sizet.type(), root, comm);
+    mxx::bcast(total_size, root, comm);
     if (total_size >= mxx::max_int) {
         // use custom implementation for large sizes
         impl::gatherv_big(data, size, out, recv_sizes, root, comm);
