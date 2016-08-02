@@ -1210,8 +1210,13 @@ std::vector<T> all2all(const std::vector<T>& msgs, const mxx::comm& comm = mxx::
  *                           All-to-all-V                            *
  *********************************************************************/
 
-#define MXX_CHAR_ALL2ALL_ALIGN 1
-#define MXX_BENCHMARK_ALL2ALL 1
+#ifndef MXX_CHAR_ALL2ALL_ALIGN
+#define MXX_CHAR_ALL2ALL_ALIGN 0
+#endif
+
+#ifndef MXX_BENCHMARK_ALL2ALL
+#define MXX_BENCHMARK_ALL2ALL 0
+#endif
 
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.
@@ -1313,6 +1318,7 @@ void all2allv(const T* msgs, const std::vector<size_t>& send_sizes, const std::v
  *                      the number of elements to be received from each process.
  * @param comm          The communicator (`comm.hpp`). Defaults to `world`.
  */
+#if MXX_CHAR_ALL2ALL_ALIGN
 template <typename T>
 void char_all2allv(const T* in, const std::vector<size_t>& send_counts, T* out, const std::vector<size_t>& recv_counts, const mxx::comm& c) {
     std::vector<size_t> displs = impl::get_displacements(send_counts);
@@ -1352,6 +1358,7 @@ void char_all2allv(const T* in, const std::vector<size_t>& send_counts, T* out, 
         o += recv_counts[i];
     }
 }
+#endif
 
 /**
  * @brief   All-to-all message exchange between all processes in the communicator.
