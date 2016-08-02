@@ -68,7 +68,7 @@ if(ENABLE_COVERAGE)
   # with a stack procetor into a partially covered statement.
   #
   # additionally: disable inlining for more precise coverage
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fno-stack-protector --fno-inline --fno-inline-small-functions -fno-default-inline")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fno-stack-protector -fno-inline -fno-inline-small-functions -fno-default-inline")
 endif(ENABLE_COVERAGE)
 
 ### Fake BIG MPI for testing of BigMPI functions on travis or other small RAM
@@ -89,5 +89,6 @@ include_directories("${PROJECT_SOURCE_DIR}")
 # build tests
 add_subdirectory(gtest)
 add_subdirectory(test)
-
+if (NOT TRAVIS)
 add_subdirectory(src)
+endif (NOT TRAVIS)
