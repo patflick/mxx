@@ -28,109 +28,145 @@
 
 #include <cxx-prettyprint/prettyprint.hpp>
 
-TEST(MxxDistribution, StableBlockDistr) {
-    mxx::comm c;
-
-    // create unequal distribution
-    size_t size = 100 + 10 * c.rank();
-    std::vector<std::pair<int,int>> vec(size);
-
-    // initialze with unique ids
+template <typename Container, typename Func>
+void test_distribute(size_t size, Func gen, const mxx::comm& c) {
     size_t prefix = mxx::exscan(size, c);
     size_t total_size = mxx::allreduce(size, c);
+
+    typedef typename Container::value_type T;
+    Container vec;
+    vec.resize(size);
     std::srand(13*c.rank());
     for (size_t i = 0; i < size; ++i) {
-        vec[i].first = prefix+i;
-        vec[i].second = std::rand();
+        vec[i] = gen(prefix+i);
     }
 
-    // test stable distribute of vector
-    std::vector<std::pair<int,int>> eq_distr = mxx::stable_distribute(vec, c);
-    // test in-place version
-    mxx::stable_distribute_inplace(vec, c);
+    // stable distribute
+    Container eq_distr = mxx::distribute(vec, c);
+    mxx::distribute_inplace(vec, c);
 
+    // get expected size
     size_t eq_size = total_size / c.size();
     if ((size_t)c.rank() < total_size % c.size())
         eq_size+=1;
     size_t eq_prefix = mxx::exscan(eq_size, c);
-    auto cmp = [](const std::pair<int,int>& x, const std::pair<int,int>& y){
-        return x.first < y.first;
-    };
-    ASSERT_TRUE(mxx::is_sorted(eq_distr.begin(), eq_distr.end(), cmp, c));
-    ASSERT_TRUE(mxx::is_sorted(vec.begin(), vec.end(), cmp, c));
+
     ASSERT_EQ(eq_size, eq_distr.size());
     ASSERT_EQ(eq_size, vec.size());
+
+    mxx::sort(vec.begin(), vec.end(), c);
+    mxx::sort(eq_distr.begin(), eq_distr.end(), c);
+
     for (size_t i = 0; i < eq_distr.size(); ++i) {
-        ASSERT_EQ(eq_prefix+i,(size_t)eq_distr[i].first);
-        ASSERT_EQ(eq_prefix+i,(size_t)vec[i].first);
+        T expected = gen(eq_prefix+i);
+        ASSERT_EQ(expected, eq_distr[i]);
+        ASSERT_EQ(expected, vec[i]);
     }
 }
 
-TEST(MxxDistribution, StableScatterBlockDistr) {
-    mxx::comm c;
-    std::basic_string<unsigned char> vec;
-    size_t size = 40;
-    if (c.rank() == c.size() / 2) {
-        vec.resize(size);
-        for (size_t i = 0; i < size; ++i) {
-            vec[i] = static_cast<unsigned char>(i % 256);
-        }
+template <typename Container, typename Func>
+void test_stable_distribute(size_t size, Func gen, const mxx::comm& c) {
+    size_t prefix = mxx::exscan(size, c);
+    size_t total_size = mxx::allreduce(size, c);
+
+    typedef typename Container::value_type T;
+    Container vec;
+    vec.resize(size);
+    std::srand(13*c.rank());
+    for (size_t i = 0; i < size; ++i) {
+        vec[i] = gen(prefix+i);
     }
-    // test non-inplace
-    std::basic_string<unsigned char> x = mxx::stable_distribute(vec, c);
-    // test inplace
+
+    // stable distribute
+    Container eq_distr = mxx::stable_distribute(vec, c);
     mxx::stable_distribute_inplace(vec, c);
 
-    size_t eq_size = size / c.size();
-    if ((size_t)c.rank() < size % c.size())
+    // get expected size
+    size_t eq_size = total_size / c.size();
+    if ((size_t)c.rank() < total_size % c.size())
         eq_size+=1;
-    size_t prefix = mxx::exscan(eq_size, c);
+    size_t eq_prefix = mxx::exscan(eq_size, c);
 
-    ASSERT_EQ(eq_size, x.size());
+    ASSERT_EQ(eq_size, eq_distr.size());
     ASSERT_EQ(eq_size, vec.size());
 
-    for (size_t i = 0; i < eq_size; ++i) {
-        ASSERT_EQ(static_cast<unsigned char>((prefix + i) % 256), x[i]);
-        ASSERT_EQ(static_cast<unsigned char>((prefix + i) % 256), vec[i]);
+    for (size_t i = 0; i < eq_distr.size(); ++i) {
+        T expected = gen(eq_prefix+i);
+        ASSERT_EQ(expected, eq_distr[i]);
+        ASSERT_EQ(expected, vec[i]);
     }
 }
 
-TEST(MxxDistribution, BlockDistr) {
+
+
+TEST(MxxDistribution, DistributePairVector) {
     mxx::comm c;
     // create unequal distribution
     size_t size = std::max<long>(10, 100 - 10 * c.rank());
-    std::vector<int> vec(size);
 
-    // initialze with unique ids
-    size_t prefix = mxx::exscan(size, c);
-    size_t total_size = mxx::allreduce(size, c);
-    std::srand(13*c.rank());
-    for (size_t i = 0; i < size; ++i) {
-        vec[i] = prefix+i;
+    auto gen = [](size_t i) {
+        return std::pair<int,int>(i, i);
+    };
+
+    typedef std::vector<std::pair<int,int>> container_type;
+    test_distribute<container_type>(size, gen, c);
+    test_stable_distribute<container_type>(size, gen, c);
+
+    size = 0;
+    if (c.rank() == c.size()/2) {
+        size = 10*c.size();
     }
 
-    // calculate expected distribution size
-    size_t eq_size = total_size / c.size();
-    if ((size_t)c.rank() < total_size % c.size())
-        eq_size+=1;
-    size_t eq_prefix = mxx::exscan(eq_size, c);
-
-    // equally distribute (test inplace version after non-inplace version)
-    std::vector<int> x = mxx::distribute(vec, c);
-    mxx::distribute_inplace(vec, c);
-
-    ASSERT_TRUE(mxx::all_of(eq_size == vec.size()));
-    ASSERT_TRUE(mxx::all_of(eq_size == x.size()));
-
-    // sort equally distributed vector
-    mxx::sort(vec.begin(), vec.end());
-    mxx::sort(x.begin(), x.end());
-
-    // check that all values are still there
-    for (size_t i = 0; i < vec.size(); ++i) {
-        ASSERT_EQ(eq_prefix+i,(size_t)vec[i]);
-        ASSERT_EQ(eq_prefix+i,(size_t)x[i]);
-    }
+    test_distribute<container_type>(size, gen, c);
+    test_stable_distribute<container_type>(size, gen, c);
 }
 
-// TODO: add more tests
+
+
+TEST(MxxDistribution, DistributeVector) {
+    mxx::comm c;
+    // create unequal distribution
+    size_t size = std::max<long>(10, 100 - 10 * c.rank());
+
+    auto gen = [](size_t i) {
+        return static_cast<int>(i);
+    };
+
+
+    test_distribute<std::vector<int>>(size, gen, c);
+    test_stable_distribute<std::vector<int>>(size, gen, c);
+
+    size = 0;
+    if (c.rank() == c.size()/2) {
+        size = 10*c.size();
+    }
+
+    test_distribute<std::vector<int>>(size, gen, c);
+    test_stable_distribute<std::vector<int>>(size, gen, c);
+}
+
+
+TEST(MxxDistribution, DistributeString) {
+    mxx::comm c;
+    // create unequal distribution
+    size_t size = 5 + 7*c.rank();
+
+    auto gen = [](size_t i) {
+        char c = static_cast<char>(i % 256);
+        if (c == '\0')
+            ++c;
+        return c;
+    };
+
+    test_stable_distribute<std::string>(size, gen, c);
+
+    size = 0;
+    if (c.rank() == 0) {
+        size = 10*c.size();
+    }
+
+    test_stable_distribute<std::string>(size, gen, c);
+}
+
+TEST(MxxDistribution, DistributeEmpty) {
+}

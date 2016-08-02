@@ -119,23 +119,23 @@ TEST(MxxSort, SampleSortInbalanced) {
 
 TEST(MxxSort, StableSort) {
     mxx::comm c;
-    typedef std::tuple<int,int,int> tuple_t;
+    typedef std::pair<int,int> tuple_t;
     std::vector<tuple_t> vec(100+c.rank());
     size_t prefix = c.rank() == 0 ? 0 : (100*(c.rank()) + ((c.rank()+1)*c.rank())/2);
     std::srand(c.rank()*7);
     for (size_t i = 0; i < vec.size(); ++i) {
-        vec[i] = tuple_t(c.rank(), prefix+i, std::rand() % 4);
+        vec[i] = tuple_t(prefix+i, std::rand() % 4);
     }
 
     auto snd_cmp = [](const tuple_t& x, const tuple_t& y) {
-        return std::get<2>(x) < std::get<2>(y);
+        return std::get<1>(x) < std::get<1>(y);
     };
     // stably sort only by second index
     mxx::stable_sort(vec.begin(), vec.end(), snd_cmp, c);
 
     // assert it is sorted lexicographically by both (second, first)
     auto full_cmp = [](const tuple_t& x, const tuple_t& y) {
-        return std::get<2>(x) < std::get<2>(y) || (std::get<2>(x) == std::get<2>(y) && std::get<1>(x) < std::get<1>(y));
+        return std::get<1>(x) < std::get<1>(y) || (std::get<1>(x) == std::get<1>(y) && std::get<0>(x) < std::get<0>(y));
     };
     ASSERT_TRUE(mxx::is_sorted(vec.begin(), vec.end(), full_cmp, c));
 }
