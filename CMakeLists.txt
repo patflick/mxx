@@ -75,7 +75,7 @@ endif(ENABLE_COVERAGE)
 ### build systems
 OPTION(FAKE_BIG_MPI "Enable a fake bigMPI threshold of 1" OFF)
 if (FAKE_BIG_MPI)
-  add_definitions(-DMXX_MAX_INT=1)
+  add_definitions(-DMXX_MAX_INT=3)
 endif(FAKE_BIG_MPI)
 
 ###### Executable and Libraries
