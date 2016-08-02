@@ -3,6 +3,14 @@ cmake_minimum_required(VERSION 2.6)
 # project settings
 project(mxx-test)
 
+if (TRAVIS)
+
+# on travis: build a single executable
+add_executable(mxx-test-all test_all.cpp)
+target_link_libraries(mxx-test-all mxx-gtest-main)
+
+else (TRAVIS)
+
 add_executable(mxx-test-collective test_collective.cpp)
 target_link_libraries(mxx-test-collective mxx-gtest-main)
 
@@ -27,6 +35,10 @@ target_link_libraries(mxx-test-bucketing mxx-gtest-main)
 
 add_executable(mxx-test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
 target_link_libraries(mxx-test-all mxx-gtest-main)
+
+endif (TRAVIS)
+
+
 
 ################
 #  Old tests:  #

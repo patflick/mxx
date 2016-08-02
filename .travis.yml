@@ -63,8 +63,8 @@ before_script:
     # prepare build mxx
     - mkdir build
     - cd build
-    - if [ -z "$FAKEBIG" ]; then cmake -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../;
-      else cmake -DFAKE_BIG_MPI=ON -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../; fi
+    - if [ -z "$FAKEBIG" ]; then cmake -DTRAVIS=ON -DCMAKE_BUILD_TYPE=Debug -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../;
+      else cmake -DFAKE_BIG_MPI=ON -DTRAVIS=ON -DCMAKE_BUILD_TYPE=Debug -DMPI_C_COMPILER=$HOME/local/$MPI/bin/mpicc -DMPI_CXX_COMPILER=$HOME/local/$MPI/bin/mpicxx ../; fi
 
 script:
     # build mxx and run tests
@@ -76,5 +76,5 @@ script:
 after_success:
   # only collect coverage if compiled with gcc
   - if [ "$CXX" = "g++-4.8" ]; then codecov --gcov-exec gcov-4.8; fi
-  - cat "/home/travis/build/patflick/mxx/build/#home#travis#build#patflick#mxx#include#mxx#sort.hpp.gcov"
-  - gdb -batch -ex "b sort.hpp:47" -ex run -ex disas -ex q --args ./bin/mxx-test-sort
+  #- cat "/home/travis/build/patflick/mxx/build/#home#travis#build#patflick#mxx#include#mxx#sort.hpp.gcov"
+  #- gdb -batch -ex "b sort.hpp:47" -ex run -ex disas -ex q --args ./bin/mxx-test-sort

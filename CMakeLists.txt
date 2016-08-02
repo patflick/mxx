@@ -52,11 +52,23 @@ endif(DOXYGEN_FOUND)
 
 ### Test Coverage
 OPTION(ENABLE_COVERAGE "Enable code coverage reporting" OFF)
+
+# on travis: debug build with coverage
+OPTION(TRAVIS "Travis build" OFF)
+if(TRAVIS)
+  # enable coverage
+  SET(ENABLE_COVERAGE ON CACHE BOOL "Enable code coverage reporting" FORCE)
+  # set debug build
+  SET(CMAKE_BUILD_TYPE Debug)
+endif(TRAVIS)
+
 if(ENABLE_COVERAGE)
   # turn off stack protection for gcov coverage, because the stack protector shows
   # up as a never taken branch, and thus turns any last statement in a function
   # with a stack procetor into a partially covered statement.
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fno-stack-protector")
+  #
+  # additionally: disable inlining for more precise coverage
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fno-stack-protector --fno-inline --fno-inline-small-functions -fno-default-inline")
 endif(ENABLE_COVERAGE)
 
 ### Fake BIG MPI for testing of BigMPI functions on travis or other small RAM
@@ -77,4 +89,5 @@ include_directories("${PROJECT_SOURCE_DIR}")
 # build tests
 add_subdirectory(gtest)
 add_subdirectory(test)
+
 add_subdirectory(src)

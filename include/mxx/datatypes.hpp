@@ -540,7 +540,10 @@ datatype get_datatype(const T&) {
     MPI_Type_free(&struct_type); \
     return _type;
 
-#define MXX_DT_STRUCT_MEMBERS_GET_TYPE(BASE_TYPE, ...) MXX_DT_PREAMBLE(BASE_TYPE); FOR_EACH(MXX_DT_MEMBER_DISPLS, __VA_ARGS__); MXX_DT_POSTAMBLE(BASE_TYPE);
+
+#define MXX_WRAP_TEMPLATE(...) __VA_ARGS__
+
+#define MXX_DT_STRUCT_MEMBERS_GET_TYPE(BASE_TYPE, ...) MXX_DT_PREAMBLE(MXX_WRAP_TEMPLATE(BASE_TYPE)); FOR_EACH(MXX_DT_MEMBER_DISPLS, __VA_ARGS__); MXX_DT_POSTAMBLE(MXX_WRAP_TEMPLATE(BASE_TYPE));
 #define MXX_DT_STRUCT_MEMBER_NUM_BASIC(MEMBER) datatype_builder<decltype(p. MEMBER)>::num_basic_elements()
 #define MXX_DT_STRUCT_MEMBER_ADD_NUM_BASIC(MEMBER) + datatype_builder<decltype(p. MEMBER)>::num_basic_elements()
 
@@ -551,12 +554,14 @@ datatype get_datatype(const T&) {
       FOR_EACH(MXX_DT_STRUCT_MEMBER_ADD_NUM_BASIC, __VA_ARGS__) ;\
     }
 
+
+
 #define MXX_CUSTOM_STRUCT_(BASE_TYPE, ...) \
 struct datatype_builder<BASE_TYPE> { \
     static MPI_Datatype get_type() { \
-      MXX_DT_STRUCT_MEMBERS_GET_TYPE(BASE_TYPE, __VA_ARGS__); \
+      MXX_DT_STRUCT_MEMBERS_GET_TYPE(MXX_WRAP_TEMPLATE(BASE_TYPE), __VA_ARGS__); \
     } \
-    MXX_DT_STRUCT_MEMBERS_NUM_BASIC(BASE_TYPE, __VA_ARGS__); \
+    MXX_DT_STRUCT_MEMBERS_NUM_BASIC(MXX_WRAP_TEMPLATE(BASE_TYPE), __VA_ARGS__); \
 };
 
 #define MXX_CUSTOM_STRUCT(BASE_TYPE, ...) \
@@ -566,7 +571,9 @@ MXX_CUSTOM_STRUCT_(BASE_TYPE, __VA_ARGS__); \
 } // namespace mxx
 
 
-#define MXX_CUSTOM_TEMPLATE_STRUCT(BASE_TYPE, ...) MXX_CUSTOM_STRUCT_(BASE_TYPE, __VA_ARGS__)
+// use the MXX_WRAP_TEMPLATE() around templated types that have more than one paramter
+// otherwise the comma "," in the template would split the templated type into separate arguments
+#define MXX_CUSTOM_TEMPLATE_STRUCT(BASE_TYPE, ...) MXX_CUSTOM_STRUCT_(MXX_WRAP_TEMPLATE(BASE_TYPE), __VA_ARGS__)
 
 } // namespace mxx
 
