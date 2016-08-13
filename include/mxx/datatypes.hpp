@@ -61,9 +61,7 @@ namespace mxx
  */
 
 // TODO:
-// - [ ] base class with MPI type modifiers (contiguous, vector, indexed, etc)
 // - [x] compile time checker for builtin types
-// - [ ] static function to return MPI_Datatype for builtin types!
 // - [ ] put attr_map in here!
 // - [ ] add to-string and caching
 // - [ ] implement MPI type introspection (get envelope)
@@ -80,6 +78,9 @@ datatype get_datatype();
 template <typename T>
 datatype get_datatype(const T&);
 
+template <typename T, typename... Args>
+datatype built_custom_datatype(T*, Args&...);
+
 // MPI_Datatype wrapper
 class datatype {
 protected:
@@ -89,6 +90,10 @@ protected:
     friend datatype get_datatype();
     template <typename T>
     friend datatype get_datatype(const T&);
+    template <typename T, typename... Args>
+    friend datatype built_custom_datatype(T*, Args&...);
+    template <typename T>
+    friend class custom_datatype_builder;
 public:
     datatype() : mpitype(MPI_DATATYPE_NULL), builtin(true) {
     }
@@ -172,10 +177,19 @@ public:
         return result;
     }
 
+    std::pair<MPI_Aint, MPI_Aint> get_extent() {
+        std::pair<MPI_Aint, MPI_Aint> e;
+        MPI_Type_get_extent(mpitype, &e.first, &e.second);
+        return e;
+    }
+
+    // TODO: get envelope + get_contents for printing of datatype!
+    //
+
     // TODO: indexed/hindexed?
 
     virtual ~datatype() {
-      // TODO: don't free, but decrease counter in type cache
+        // TODO: don't free, but decrease counter in type cache
         if (!builtin)
             MPI_Type_free(&mpitype);
     }
@@ -400,7 +414,6 @@ struct datatype_builder<std::tuple<Types...> > {
         std::map<MPI_Aint, MPI_Datatype> members;
         tuple_members<size,size,Types...>::get(members);
 
-
         // fill displacements and types according to in-memory order in tuple
         // NOTE: the in-memory order is not necessarily the same as the order
         // of types as accessed by std::get
@@ -431,6 +444,94 @@ struct datatype_builder<std::tuple<Types...> > {
         return tuple_basic_els<Types...>::get_num();
     }
 };
+
+template <typename T>
+class custom_datatype_builder {
+private:
+    // reference to the type we're building the custom datatype for
+    const T& that;
+    // saves information about the members (displacement + MPI_Datatype)
+    std::map<MPI_Aint, MPI_Datatype> members;
+public:
+
+    // creates the custom datatype builder
+    explicit custom_datatype_builder(const T& type_val) : that(type_val), members() {}
+
+    template <typename M>
+    void add_member(const M& member) {
+        // get member displacement
+        MPI_Aint t_adr, elem_adr;
+
+        MPI_Get_address((void*)&that, &t_adr);
+        MPI_Get_address((void*)&member, &elem_adr);
+        // byte offset from beginning of tuple
+        MPI_Aint displ = elem_adr - t_adr;
+        // assert this is actually a member of the type T
+        MXX_ASSERT(0 <= displ && displ + sizeof(M) <= sizeof(T));
+
+        // fill in basic type
+        MPI_Datatype mpi_dt = datatype_builder<M>::get_type();
+        // add to map
+        members[displ] = mpi_dt;
+    }
+
+    // TODO: possibly use pointer to member syntax!
+    //       which wouldn't require any instantiations
+    template <typename M>
+    void add_member(M T::*m) {
+    }
+
+    template <typename M>
+    void add_members(const M& m) {
+        add_member(m);
+    }
+
+    template <typename M, typename... Members>
+    void add_members(const M& m, const Members&...vargs) {
+        add_member(m);
+        add_members(vargs...);
+    }
+
+    // returns the datatype for all added members
+    datatype get_datatype() const {
+        MXX_ASSERT(members.size() > 0);
+        // create the blocklength, displacements, and datatype arrays
+        size_t n_members = members.size();
+        std::vector<MPI_Aint> displs(n_members);
+        std::vector<MPI_Datatype> mpitypes(n_members);
+        std::vector<int> blen(n_members, 1);
+        std::size_t i = 0;
+        for (std::map<MPI_Aint, MPI_Datatype>::const_iterator it = members.begin();
+                it != members.end(); ++it) {
+            displs[i] = it->first;
+            mpitypes[i] = it->second;
+            ++i;
+        }
+
+        // create type
+        MPI_Datatype _type;
+        MPI_Datatype struct_type;
+        MPI_Type_create_struct(n_members, &blen[0], &displs[0], &mpitypes[0], &struct_type);
+        MPI_Type_create_resized(struct_type, 0, sizeof(T), &_type);
+        MPI_Type_commit(&_type);
+        MPI_Type_free(&struct_type);
+
+        // return mxx::datatype wrapper
+        datatype dt(_type, false);
+        return dt;
+    }
+};
+
+
+
+// non-static datatype construction using variadic templates and only a subset of members
+template <typename T, typename... Args>
+datatype built_custom_datatype(T* val, Args&...args) {
+    custom_datatype_builder<T> builder(*val);
+    builder.add_members(args...);
+    return builder.get_datatype();
+}
+
 
 
 /*
