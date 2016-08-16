@@ -36,6 +36,9 @@
 #include <type_traits>
 
 #include "common.hpp"
+#include "type_traits.hpp"
+
+
 
 namespace mxx
 {
@@ -72,11 +75,23 @@ class is_builtin_type : public std::false_type {};
 
 class datatype;
 
+// TODO: there has to be a better way for this
+} // namespace mxx
+
+std::false_type make_datatype();
+
+namespace mxx {
+
+template <typename T>
+class static_datatype_builder;
+
 template <typename T>
 datatype get_datatype();
 
+/*
 template <typename T>
-datatype get_datatype(const T&);
+datatype build_datatype(const T&);
+*/
 
 template <typename T, typename... Args>
 datatype built_custom_datatype(T*, Args&...);
@@ -84,18 +99,26 @@ datatype built_custom_datatype(T*, Args&...);
 // MPI_Datatype wrapper
 class datatype {
 protected:
-    datatype(MPI_Datatype mpidt, bool builtin) : mpitype(mpidt), builtin(builtin) {
-    }
+    /*
     template <typename T>
     friend datatype get_datatype();
+    */
+
     template <typename T>
-    friend datatype get_datatype(const T&);
+    friend datatype build_datatype(const T&);
+
     template <typename T, typename... Args>
     friend datatype built_custom_datatype(T*, Args&...);
     template <typename T>
     friend class custom_datatype_builder;
+    template <typename T, typename Derived>
+    friend class datatype_builder_base;
 public:
     datatype() : mpitype(MPI_DATATYPE_NULL), builtin(true) {
+    }
+
+    // TODO: make this constructor protected and add friend access to builder function
+    datatype(MPI_Datatype mpidt, bool builtin) : mpitype(mpidt), builtin(builtin) {
     }
 
     // copy constructor
@@ -278,6 +301,14 @@ MXX_DATATYPE_BUILTIN_PAIR(long double, MPI_LONG_DOUBLE_INT);
 
 #undef MXX_DATATYPE_BUILTIN_PAIR
 
+template <typename T>
+struct has_datatype<T, typename std::enable_if<mxx::is_builtin_type<T>::value>::type> : std::true_type {};
+
+// TODO: extend this!
+template <typename T, typename U>
+struct has_datatype<std::pair<T, U>> : std::true_type {};
+
+
 /**
  * @brief   MPI datatype mapping for std::array
  */
@@ -445,51 +476,52 @@ struct datatype_builder<std::tuple<Types...> > {
     }
 };
 
-template <typename T>
-class custom_datatype_builder {
-private:
-    // reference to the type we're building the custom datatype for
-    const T& that;
+template <typename T, typename Derived>
+class datatype_builder_base {
     // saves information about the members (displacement + MPI_Datatype)
-    std::map<MPI_Aint, MPI_Datatype> members;
+    std::map<MPI_Aint, ::mxx::datatype> members;
 public:
 
-    // creates the custom datatype builder
-    explicit custom_datatype_builder(const T& type_val) : that(type_val), members() {}
+    template <typename M>
+    void add_member(M&& m) {
+        static_cast<Derived*>(this)->add_member(std::forward<M>(m));
+    }
 
     template <typename M>
-    void add_member(const M& member) {
-        // get member displacement
-        MPI_Aint t_adr, elem_adr;
+    void add_member_by_offset(size_t offset) {
+        // get the underlying datatype
+        datatype dt = ::mxx::get_datatype<M>();
 
-        MPI_Get_address((void*)&that, &t_adr);
-        MPI_Get_address((void*)&member, &elem_adr);
-        // byte offset from beginning of tuple
-        MPI_Aint displ = elem_adr - t_adr;
+        MPI_Aint displ = offset;
         // assert this is actually a member of the type T
         MXX_ASSERT(0 <= displ && displ + sizeof(M) <= sizeof(T));
-
-        // fill in basic type
-        MPI_Datatype mpi_dt = datatype_builder<M>::get_type();
         // add to map
-        members[displ] = mpi_dt;
+        members[displ] = std::move(dt);
     }
 
     // TODO: possibly use pointer to member syntax!
     //       which wouldn't require any instantiations
+    /*
     template <typename M>
     void add_member(M T::*m) {
     }
+    */
 
     template <typename M>
-    void add_members(const M& m) {
-        add_member(m);
+    void add_members(M&& m) {
+        add_member(std::forward<M>(m));
     }
 
     template <typename M, typename... Members>
-    void add_members(const M& m, const Members&...vargs) {
-        add_member(m);
-        add_members(vargs...);
+    void add_members(M&& m, Members&&...vargs) {
+        add_member(std::forward<M>(m));
+        add_members(std::forward<Members>(vargs)...);
+    }
+
+    // the call operator adds everything as members
+    template <typename... Members>
+    void operator()(Members&&...vargs) {
+      add_members(std::forward<Members>(vargs)...);
     }
 
     // returns the datatype for all added members
@@ -501,10 +533,10 @@ public:
         std::vector<MPI_Datatype> mpitypes(n_members);
         std::vector<int> blen(n_members, 1);
         std::size_t i = 0;
-        for (std::map<MPI_Aint, MPI_Datatype>::const_iterator it = members.begin();
+        for (std::map<MPI_Aint, ::mxx::datatype>::const_iterator it = members.begin();
                 it != members.end(); ++it) {
             displs[i] = it->first;
-            mpitypes[i] = it->second;
+            mpitypes[i] = it->second.type();
             ++i;
         }
 
@@ -522,12 +554,54 @@ public:
     }
 };
 
+template <typename T>
+class value_datatype_builder : public datatype_builder_base<T, value_datatype_builder<T>> {
+private:
+    // reference to the type we're building the custom datatype for
+    const T& that;
+    typedef datatype_builder_base<T, value_datatype_builder<T>> base_type;
+public:
+
+    value_datatype_builder(const T& value) : base_type(), that(value) {}
+
+    // custom add_member function which adds members by their offset to `&that`
+    template <typename M>
+    void add_member(const M& member) {
+        // get member displacement
+        MPI_Aint t_adr, elem_adr;
+
+        MPI_Get_address((void*)&that, &t_adr);
+        MPI_Get_address((void*)&member, &elem_adr);
+
+        // byte offset from beginning of tuple
+        MPI_Aint displ = elem_adr - t_adr;
+        this->template add_member_by_offset<M>(displ);
+    }
+};
+
+// determine the offset of a `pointer to member` type without instantiation
+template <typename T, typename M>
+size_t offset_of(M T::* m) {
+    return reinterpret_cast<size_t>(&(((T*)nullptr)->*m));
+}
+
+template <typename T>
+class static_datatype_builder : public datatype_builder_base<T, static_datatype_builder<T>> {
+private:
+    typedef datatype_builder_base<T, static_datatype_builder<T>> base_type;
+public:
+    // add members via "pointer to member" types
+    template <typename M>
+    void add_member(M T::*m) {
+        this->template add_member_by_offset<M>(offset_of(m));
+    }
+};
 
 
 // non-static datatype construction using variadic templates and only a subset of members
 template <typename T, typename... Args>
 datatype built_custom_datatype(T* val, Args&...args) {
-    custom_datatype_builder<T> builder(*val);
+    value_datatype_builder<T> builder(*val);
     builder.add_members(args...);
     return builder.get_datatype();
 }
@@ -575,16 +649,90 @@ struct datatype_contiguous<T,0> {
 };
 */
 
+MXX_DEFINE_IS_GLOBAL_FUNC(make_datatype)
+MXX_DEFINE_HAS_STATIC_MEMBER(get_type)
+
 template <typename T>
-datatype get_datatype() {
+struct has_builder : has_static_member_get_type<datatype_builder<T>, MPI_Datatype()> {};
+
+// basically <=> `has_datatype` (TODO consistent naming)
+template <typename T, typename Enable = void>
+struct is_trivial_type : std::false_type {};
+
+template <typename T>
+struct is_trivial_type<T, typename std::enable_if<
+ has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value
+ || has_member_datatype<T, void(value_datatype_builder<T>&)>::value
+ || is_global_func_make_datatype<void(value_datatype_builder<T>&, T&)>::value
+ || has_builder<T>::value
+ >::type>
+: std::true_type {};
+
+
+// TODO: remove this after refactoring the building process for std::array, std::pair, std::tuple,
+//       the custom struct macros and the builtin datatype
+
+
+template <typename T>
+typename std::enable_if<has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value, datatype>::type
+build_datatype() {
+    //static_assert(!has_static_member_datatype<T, void(mxx::value_datatype_builder<T>&)>::value, "needs static datatype() function");
+    //T val;
+    mxx::static_datatype_builder<T> builder;
+    T::datatype(builder);
+    return builder.get_datatype();
+}
+
+template <typename T>
+typename std::enable_if<
+!has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value
+&& has_member_datatype<T, void(value_datatype_builder<T>&)>::value
+, datatype>::type
+build_datatype() {
+    T val;
+    value_datatype_builder<T> builder(val);
+    val.datatype(builder);
+    return builder.get_datatype();
+}
+
+template <typename T>
+datatype build_datatype(const T&) {
+    datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
+    return dt;
+}
+
+// TODO: use is_builtin etc instead of `has_builder` after removing the custom `datatype_builder`
+//       specializations
+template <typename T>
+typename std::enable_if<has_builder<T>::value, datatype>::type
+build_datatype() {
     datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
     return dt;
 }
 
 template <typename T>
-datatype get_datatype(const T&) {
-    datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
-    return dt;
+typename std::enable_if<!is_trivial_type<T>::value, datatype>::type
+build_datatype() {
+    // static assert the opposite to trigger the static assertion failure
+    static_assert(is_trivial_type<T>::value,
+    "Type `T` is not a `trivial` type and is thus not supported for mxx send/recv operations. "
+    "This type needs one of the following to be supported as trivial datatype: "
+    "custom datatype builder, member function `datatype` or global function `make_datatype(Layout& l, T&)`");
+
+    return datatype();
+}
+
+
+template <typename T>
+datatype get_datatype() {
+    // TODO: retrieve cached datatype
+    return build_datatype<T>();
+}
+
+template <typename T>
+datatype get_datatype(const T& t) {
+    // TODO: retrieve cached datatype
+    return build_datatype(t);
 }
 
 
