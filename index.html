@@ -22,6 +22,11 @@
       <h1>
 <a id="mxx" class="anchor" href="#mxx" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>mxx</h1>
 
+<p><a href="https://travis-ci.org/patflick/mxx"><img src="https://img.shields.io/travis/patflick/mxx.svg" alt="Build Status"></a>
+<a href="https://travis-ci.org/patflick/mxx"><img src="https://travis-ci.org/patflick/mxx.svg?branch=master" alt="Build Status"></a>
+<a href="https://codecov.io/gh/patflick/mxx"><img src="https://codecov.io/gh/patflick/mxx/branch/master/graph/badge.svg" alt="codecov"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%20v2.0-blue.svg" alt="Apache 2.0 License"></a></p>
+
 <p><code>mxx</code> is a <code>C++</code>/<code>C++11</code> template library for <code>MPI</code>. The main goal of this
 library is to provide two things:</p>
 
@@ -56,25 +61,30 @@ C++ types such as <code>std::tuple</code>, <code>std::pair</code>, and <code>std
 </ul>
 
 <h3>
-<a id="planned" class="anchor" href="#planned" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Planned</h3>
+<a id="planned--todo" class="anchor" href="#planned--todo" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Planned / TODO</h3>
 
 <ul>
-<li>Parallel random number engines (for use with <code>C++11</code> standard library distributions)</li>
-<li>More parallel (standard) algorithms</li>
-<li>Wrappers for non-blocking collectives</li>
-<li>(maybe) serialization/de-serialization of non contiguous data types</li>
-<li>macros for easy datatype creation and handling for custom/own structs and classes</li>
-<li>Implementing and tuning different sorting algorithms</li>
-<li>Communicator classes for different topologies</li>
-<li>
-<code>mxx::env</code> similar to <code>boost::mpi::env</code> for wrapping <code>MPI_Init</code> and <code>MPI_Finalize</code>
+<li>[ ] Parallel random number engines (for use with <code>C++11</code> standard library distributions)</li>
+<li>[ ] More parallel (standard) algorithms</li>
+<li>[ ] Wrappers for non-blocking collectives</li>
+<li>[ ] serialization/de-serialization of non contiguous data types (maybe)</li>
+<li>[x] <del>macros for easy datatype creation and handling for custom/own structs and classes</del>
+</li>
+<li>[ ] Implementing and tuning different sorting algorithms</li>
+<li>[ ] Communicator classes for different topologies</li>
+<li>[x] <del><code>mxx::env</code> similar to <code>boost::mpi::env</code> for wrapping <code>MPI_Init</code> and <code>MPI_Finalize</code></del>
+</li>
+<li>[ ] full-code and intro documentations</li>
+<li>[ ] Increase test coverage:
+<img src="http://codecov.io/github/patflick/mxx/branch.svg?branch=master" alt="codecov.io">
 </li>
 </ul>
 
 <h3>
 <a id="status" class="anchor" href="#status" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Status</h3>
 
-<p>Currently <code>mxx</code> is just a small personal project at very early stages.</p>
+<p>Currently <code>mxx</code> is a small personal project at early stages, with lots of
+changes still going on. However, feel free to contribute.</p>
 
 <h3>
 <a id="examples" class="anchor" href="#examples" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Examples</h3>
@@ -190,10 +200,9 @@ your project, and you'll be all set.</p>
 <h3>
 <a id="dependencies" class="anchor" href="#dependencies" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Dependencies</h3>
 
-<p>At this point, <code>mxx</code> requires a <code>C++11</code> compatible version of <code>gcc</code>. Some
-functions still rely on <code>gcc</code> specific function calls. <code>mxx</code> currently works
-with <code>MPI-2</code> and <code>MPI-3</code>. However, some collective operations and sorting will
-work on data sizes <code>&gt;= 2 GB</code> only with <code>MPI-3</code>.</p>
+<p><code>mxx</code> requires a <code>C++11</code> compatible compiler.
+<code>mxx</code> currently works with <code>MPI-2</code> and <code>MPI-3</code>.
+However, some collective operations and sorting will work on data sizes <code>&gt;= 2 GB</code> only with <code>MPI-3</code>.</p>
 
 <h3>
 <a id="compiling" class="anchor" href="#compiling" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Compiling</h3>
