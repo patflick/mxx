@@ -2,7 +2,7 @@
 <html lang="en-us">
   <head>
     <meta charset="UTF-8">
-    <title>Mxx by patflick</title>
+    <title>mxx by patflick</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
     <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
@@ -11,7 +11,7 @@
   </head>
   <body>
     <section class="page-header">
-      <h1 class="project-name">Mxx</h1>
+      <h1 class="project-name">mxx</h1>
       <h2 class="project-tagline">C++11 Message Passing</h2>
       <a href="https://github.com/patflick/mxx" class="btn">View on GitHub</a>
       <a href="https://github.com/patflick/mxx/zipball/master" class="btn">Download .zip</a>
@@ -20,7 +20,7 @@
 
     <section class="main-content">
       <h1>
-<a id="mxx" class="anchor" href="#mxx" aria-hidden="true"><span class="octicon octicon-link"></span></a>mxx</h1>
+<a id="mxx" class="anchor" href="#mxx" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>mxx</h1>
 
 <p><code>mxx</code> is a <code>C++</code>/<code>C++11</code> template library for <code>MPI</code>. The main goal of this
 library is to provide two things:</p>
@@ -35,7 +35,7 @@ distributed memory architectures, such as sorting.</li>
 development, prototyping, and deployment.</p>
 
 <h3>
-<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Features</h3>
+<a id="features" class="anchor" href="#features" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Features</h3>
 
 <ul>
 <li> All functions are templated by type. All <code>MPI_Datatype</code> are deducted
@@ -56,7 +56,7 @@ C++ types such as <code>std::tuple</code>, <code>std::pair</code>, and <code>std
 </ul>
 
 <h3>
-<a id="planned" class="anchor" href="#planned" aria-hidden="true"><span class="octicon octicon-link"></span></a>Planned</h3>
+<a id="planned" class="anchor" href="#planned" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Planned</h3>
 
 <ul>
 <li>Parallel random number engines (for use with <code>C++11</code> standard library distributions)</li>
@@ -72,15 +72,15 @@ C++ types such as <code>std::tuple</code>, <code>std::pair</code>, and <code>std
 </ul>
 
 <h3>
-<a id="status" class="anchor" href="#status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Status</h3>
+<a id="status" class="anchor" href="#status" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Status</h3>
 
 <p>Currently <code>mxx</code> is just a small personal project at very early stages.</p>
 
 <h3>
-<a id="examples" class="anchor" href="#examples" aria-hidden="true"><span class="octicon octicon-link"></span></a>Examples</h3>
+<a id="examples" class="anchor" href="#examples" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Examples</h3>
 
 <h4>
-<a id="collective-operations" class="anchor" href="#collective-operations" aria-hidden="true"><span class="octicon octicon-link"></span></a>Collective Operations</h4>
+<a id="collective-operations" class="anchor" href="#collective-operations" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Collective Operations</h4>
 
 <p>This example shows the main features of <code>mxx</code>'s wrappers for MPI collective
 operations:</p>
@@ -99,7 +99,7 @@ enabled)</li>
     std::vector&lt;<span class="pl-c1">size_t</span>&gt; all_numbers = mxx::allgatherv(local_numbers, MPI_COMM_WORLD);</pre></div>
 
 <h4>
-<a id="reductions" class="anchor" href="#reductions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Reductions</h4>
+<a id="reductions" class="anchor" href="#reductions" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reductions</h4>
 
 <p>The following example showcases the C++11 interface to reductions:</p>
 
@@ -120,7 +120,7 @@ then a custom reduction operator (<code>MPI_Op</code>) is created from
 the given lambda, and finally <code>MPI_Allreduce</code> called for the given parameters.</p>
 
 <h4>
-<a id="sorting" class="anchor" href="#sorting" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sorting</h4>
+<a id="sorting" class="anchor" href="#sorting" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Sorting</h4>
 
 <p>Consider a simple example, where you might want to sort tuples <code>(int key,double
 x, double y)</code> by key <code>key</code> in parallel using <code>MPI</code>. Doing so in pure C/MPI
@@ -155,7 +155,7 @@ input to <code>mxx::sort</code>
 </ul>
 
 <h3>
-<a id="alternatives" class="anchor" href="#alternatives" aria-hidden="true"><span class="octicon octicon-link"></span></a>Alternatives?</h3>
+<a id="alternatives" class="anchor" href="#alternatives" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Alternatives?</h3>
 
 <p>To our knowledge, there are two noteworthy, similar open libraries available.</p>
 
@@ -175,20 +175,20 @@ point-to-point communication.</li>
 </ol>
 
 <h3>
-<a id="authors" class="anchor" href="#authors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Authors</h3>
+<a id="authors" class="anchor" href="#authors" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Authors</h3>
 
 <ul>
 <li>Patrick Flick</li>
 </ul>
 
 <h2>
-<a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h2>
+<a id="installation" class="anchor" href="#installation" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Installation</h2>
 
 <p>Since this is a header only library, simply copy and paste the <code>mxx</code> folder into
 your project, and you'll be all set.</p>
 
 <h3>
-<a id="dependencies" class="anchor" href="#dependencies" aria-hidden="true"><span class="octicon octicon-link"></span></a>Dependencies</h3>
+<a id="dependencies" class="anchor" href="#dependencies" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Dependencies</h3>
 
 <p>At this point, <code>mxx</code> requires a <code>C++11</code> compatible version of <code>gcc</code>. Some
 functions still rely on <code>gcc</code> specific function calls. <code>mxx</code> currently works
@@ -196,12 +196,12 @@ with <code>MPI-2</code> and <code>MPI-3</code>. However, some collective operati
 work on data sizes <code>&gt;= 2 GB</code> only with <code>MPI-3</code>.</p>
 
 <h3>
-<a id="compiling" class="anchor" href="#compiling" aria-hidden="true"><span class="octicon octicon-link"></span></a>Compiling</h3>
+<a id="compiling" class="anchor" href="#compiling" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Compiling</h3>
 
 <p>Not necessary. This is a header only library. There is nothing to compile.</p>
 
 <h4>
-<a id="building-tests" class="anchor" href="#building-tests" aria-hidden="true"><span class="octicon octicon-link"></span></a>Building tests</h4>
+<a id="building-tests" class="anchor" href="#building-tests" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Building tests</h4>
 
 <p>The tests can be compiled using <code>cmake</code>:</p>
 
@@ -214,7 +214,7 @@ cmake ../ <span class="pl-k">&amp;&amp;</span> make</pre></div>
 </code></pre>
 
 <h2>
-<a id="licensing" class="anchor" href="#licensing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Licensing</h2>
+<a id="licensing" class="anchor" href="#licensing" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Licensing</h2>
 
 <p>Our code is licensed under the
 <strong>Apache License 2.0</strong> (see <a href="LICENSE"><code>LICENSE</code></a>).
@@ -222,7 +222,7 @@ The licensing does not apply to the <code>ext</code> folder, which contains exte
 dependencies which are under their own licensing terms.</p>
 
       <footer class="site-footer">
-        <span class="site-footer-owner"><a href="https://github.com/patflick/mxx">Mxx</a> is maintained by <a href="https://github.com/patflick">patflick</a>.</span>
+        <span class="site-footer-owner"><a href="https://github.com/patflick/mxx">mxx</a> is maintained by <a href="https://github.com/patflick">patflick</a>.</span>
 
         <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
       </footer>
