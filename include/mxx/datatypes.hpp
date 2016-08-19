@@ -580,8 +580,9 @@ public:
 };
 
 // determine the offset of a `pointer to member` type without instantiation
-template <typename T, typename M>
-size_t offset_of(M T::* m) {
+template <typename T, typename Base, typename M>
+typename std::enable_if<std::is_base_of<Base, T>::value, size_t>::type
+offset_of(M Base::* m) {
     return reinterpret_cast<size_t>(&(((T*)nullptr)->*m));
 }
 
@@ -593,19 +594,16 @@ public:
     // add members via "pointer to member" types
     template <typename M>
     void add_member(M T::*m) {
-        this->template add_member_by_offset<M>(offset_of(m));
+        this->template add_member_by_offset<M>(offset_of<T, T, M>(m));
+    }
+
+    // support adding members of base classes
+    template <typename Base, typename M>
+    typename std::enable_if<std::is_base_of<Base, T>::value, void>::type
+    add_member(M Base::*m) {
+        this->template add_member_by_offset<M>(offset_of<T, Base, M>(m));
     }
 };
-
-
-// non-static datatype construction using variadic templates and only a subset of members
-template <typename T, typename... Args>
-datatype built_custom_datatype(T* val, Args&...args) {
-    value_datatype_builder<T> builder(*val);
-    builder.add_members(args...);
-    return builder.get_datatype();
-}
-
 
 
 /*
@@ -674,7 +672,7 @@ struct is_trivial_type<T, typename std::enable_if<
 
 
 template <typename T>
-typename std::enable_if<has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value, datatype>::type
+inline typename std::enable_if<has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value, datatype>::type
 build_datatype() {
     //static_assert(!has_static_member_datatype<T, void(mxx::value_datatype_builder<T>&)>::value, "needs static datatype() function");
     //T val;
@@ -684,7 +682,7 @@ build_datatype() {
 }
 
 template <typename T>
-typename std::enable_if<
+inline typename std::enable_if<
 !has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value
 && has_member_datatype<T, void(value_datatype_builder<T>&)>::value
 , datatype>::type
@@ -695,42 +693,42 @@ build_datatype() {
     return builder.get_datatype();
 }
 
+// TODO: enable_if specializations for this function
 template <typename T>
-datatype build_datatype(const T&) {
+inline datatype build_datatype(const T&) {
     datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
     return dt;
 }
 
-// TODO: use is_builtin etc instead of `has_builder` after removing the custom `datatype_builder`
-//       specializations
+// if datatype_builder<T> exists:
 template <typename T>
-typename std::enable_if<has_builder<T>::value, datatype>::type
+inline typename std::enable_if<has_builder<T>::value, datatype>::type
 build_datatype() {
     datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
     return dt;
 }
 
 template <typename T>
-typename std::enable_if<!is_trivial_type<T>::value, datatype>::type
+inline typename std::enable_if<!is_trivial_type<T>::value, datatype>::type
 build_datatype() {
     // static assert the opposite to trigger the static assertion failure
     static_assert(is_trivial_type<T>::value,
     "Type `T` is not a `trivial` type and is thus not supported for mxx send/recv operations. "
     "This type needs one of the following to be supported as trivial datatype: "
-    "custom datatype builder, member function `datatype` or global function `make_datatype(Layout& l, T&)`");
+    "specialized build_datatype<T>, a member function `datatype`, or global function `make_datatype(Layout& l, T&)`");
 
     return datatype();
 }
 
 
 template <typename T>
-datatype get_datatype() {
+inline datatype get_datatype() {
     // TODO: retrieve cached datatype
     return build_datatype<T>();
 }
 
 template <typename T>
-datatype get_datatype(const T& t) {
+inline datatype get_datatype(const T& t) {
     // TODO: retrieve cached datatype
     return build_datatype(t);
 }

@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-//namespace mxx {
+namespace mxx {
 
 // source for testing if member functions are available: http://stackoverflow.com/a/16824239/4639394
 #define MXX_DEFINE_HAS_MEMBER(member) \
@@ -22,7 +22,7 @@ private: \
             decltype( std::declval<T>(). member ( std::declval<Args>()... ) ), \
             Ret    /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */  \
         >::type;  /* attempt to call it and see if the return type is correct */  \
-    template<typename> \
+    template <typename> \
     static constexpr std::false_type check(...); \
     typedef decltype(check<C>(0)) type; \
 public: \
@@ -95,11 +95,9 @@ MXX_DEFINE_HAS_STATIC_MEMBER(datatype)
 MXX_DEFINE_HAS_MEMBER(datatype)
 
 
-namespace mxx {
 // TODO: build this into the mxx/datatype structures
 template <typename T, typename Enable = void>
 struct has_datatype : std::false_type {};
-}
 
 
 
@@ -178,6 +176,6 @@ template <typename C, typename Enable = void>
 struct is_flat_type : std::integral_constant<bool,
     is_contiguous_container<C>::value> {};
 
-//} // namespace mxx
+} // namespace mxx
 
 #endif // MXX_TYPE_TRAITS
