@@ -29,6 +29,7 @@
 #include <iterator>
 #include <algorithm>
 #include <vector>
+#include <tgmath.h>
 
 
 namespace mxx {
@@ -169,5 +170,3 @@ void bitonic_sort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm
 } // namespace mxx
 
 #endif // MXX_SAMPLESORT_HPP
-
-
