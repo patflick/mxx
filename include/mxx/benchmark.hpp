@@ -484,11 +484,13 @@ void bw_all2all_unaligned_char(const mxx::comm& c, const mxx::comm& smc, bool re
         // time all2all
         c.barrier();
         auto start = std::chrono::steady_clock::now();
+        /*
         if (realign) {
             char_all2allv(&els[0], send_counts, &rcv[0], recv_counts, c);
         } else {
+        */
             mxx::all2allv(&els[0], send_counts, &rcv[0], recv_counts, c);
-        }
+        //}
         //mxx::datatype dt = mxx::get_datatype<char>();
         //MPI_Alltoall(&els[0], m, dt.type(), &rcv[0], m, dt.type(), c);
         auto end = std::chrono::steady_clock::now();

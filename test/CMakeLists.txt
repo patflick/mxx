@@ -29,12 +29,17 @@ target_link_libraries(mxx-test-distribution mxx-gtest-main)
 add_executable(mxx-benchmarks benchmarks.cpp)
 target_link_libraries(mxx-benchmarks mxx-gtest-main)
 
+# Combination of all parallel tests:
+add_executable(mxx-test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
+target_link_libraries(mxx-test-all mxx-gtest-main)
+
 # TODO: sequential tests should use different main
+# TODO: these should also be tested on travis!
 add_executable(mxx-test-bucketing test_bucketing.cpp)
 target_link_libraries(mxx-test-bucketing mxx-gtest-main)
 
-add_executable(mxx-test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
-target_link_libraries(mxx-test-all mxx-gtest-main)
+add_executable(mxx-test-typetraits test_typetraits.cpp)
+target_link_libraries(mxx-test-typetraits mxx-gtest-main)
 
 endif (TRAVIS)
 

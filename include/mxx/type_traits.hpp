@@ -56,11 +56,12 @@ private: \
     typedef U signature; \
     template <typename T, T> struct has_matching_sig; \
     template <typename T> \
-    static uint16_t check(has_matching_sig<T*,& :: fname>*); \
+    static std::true_type check(has_matching_sig<T*,& :: fname>*); \
     template <typename T> \
-    static uint32_t check(...); \
+    static std::false_type check(...); \
+    typedef decltype(check<signature>(0)) type; \
 public: \
-    static constexpr bool value = sizeof(check<signature>(0)) == sizeof(uint16_t); \
+    static constexpr bool value = type::value; \
 };
 
 // own implementation of the HAS_MEMBER struct
