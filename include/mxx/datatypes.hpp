@@ -34,6 +34,8 @@
 #include <numeric>
 #include <limits>
 #include <type_traits>
+#include <typeinfo>
+#include <unordered_map>
 
 #include "common.hpp"
 #include "type_traits.hpp"
@@ -206,8 +208,15 @@ public:
         return e;
     }
 
+    std::pair<MPI_Aint, MPI_Aint> get_true_extent() {
+        std::pair<MPI_Aint, MPI_Aint> e;
+        MPI_Type_get_true_extent(mpitype, &e.first, &e.second);
+        return e;
+    }
+
     // TODO: get envelope + get_contents for printing of datatype!
-    //
+    void get_envelope() {
+    }
 
     // TODO: indexed/hindexed?
 
@@ -238,33 +247,90 @@ template <> struct datatype_builder<ctype> {                                \
                                                                             \
 template <> class is_builtin_type<ctype> : public std::true_type {};        \
 
-// char
-MXX_DATATYPE_MPI_BUILTIN(char, MPI_CHAR);
-MXX_DATATYPE_MPI_BUILTIN(unsigned char, MPI_UNSIGNED_CHAR);
-MXX_DATATYPE_MPI_BUILTIN(signed char, MPI_SIGNED_CHAR);
 
-// short
-MXX_DATATYPE_MPI_BUILTIN(unsigned short, MPI_UNSIGNED_SHORT);
-MXX_DATATYPE_MPI_BUILTIN(short, MPI_SHORT);
+// calls the given macro on each pair of builtin type and corresponding
+// MPI_Datatype
+#define MXX_FOR_ALL_BUILTIN(BUILTIN_TYPE)                                      \
+/* char */                                                                     \
+BUILTIN_TYPE(char, MPI_CHAR);                                                  \
+BUILTIN_TYPE(unsigned char, MPI_UNSIGNED_CHAR);                                \
+BUILTIN_TYPE(signed char, MPI_SIGNED_CHAR);                                    \
+                                                                               \
+/* short */                                                                    \
+BUILTIN_TYPE(unsigned short, MPI_UNSIGNED_SHORT);                              \
+BUILTIN_TYPE(short, MPI_SHORT);                                                \
+                                                                               \
+/* int */                                                                      \
+BUILTIN_TYPE(unsigned int, MPI_UNSIGNED);                                      \
+BUILTIN_TYPE(int, MPI_INT);                                                    \
+                                                                               \
+/* long */                                                                     \
+BUILTIN_TYPE(unsigned long, MPI_UNSIGNED_LONG);                                \
+BUILTIN_TYPE(long, MPI_LONG);                                                  \
+                                                                               \
+/* long long */                                                                \
+BUILTIN_TYPE(unsigned long long, MPI_UNSIGNED_LONG_LONG);                      \
+BUILTIN_TYPE(long long, MPI_LONG_LONG);                                        \
+                                                                               \
+/* floats */                                                                   \
+BUILTIN_TYPE(float, MPI_FLOAT);                                                \
+BUILTIN_TYPE(double, MPI_DOUBLE);                                              \
+BUILTIN_TYPE(long double, MPI_LONG_DOUBLE);                                    \
 
-// int
-MXX_DATATYPE_MPI_BUILTIN(unsigned int, MPI_UNSIGNED);
-MXX_DATATYPE_MPI_BUILTIN(int, MPI_INT);
 
-// long
-MXX_DATATYPE_MPI_BUILTIN(unsigned long, MPI_UNSIGNED_LONG);
-MXX_DATATYPE_MPI_BUILTIN(long, MPI_LONG);
-
-// long long
-MXX_DATATYPE_MPI_BUILTIN(unsigned long long, MPI_UNSIGNED_LONG_LONG);
-MXX_DATATYPE_MPI_BUILTIN(long long, MPI_LONG_LONG);
-
-// floats
-MXX_DATATYPE_MPI_BUILTIN(float, MPI_FLOAT);
-MXX_DATATYPE_MPI_BUILTIN(double, MPI_DOUBLE);
-MXX_DATATYPE_MPI_BUILTIN(long double, MPI_LONG_DOUBLE);
+MXX_FOR_ALL_BUILTIN(MXX_DATATYPE_MPI_BUILTIN);
 
 #undef MXX_DATATYPE_MPI_BUILTIN
+
+
+struct datatype_name {
+    std::string mpi_name;
+    std::string c_name;
+    std::string typeid_name;
+
+    datatype_name(const std::string& mpi_name, const std::string& c_name, const std::string& typeid_name)
+      : mpi_name(mpi_name), c_name(c_name), typeid_name(typeid_name) {}
+
+    datatype_name() {}
+    datatype_name(const datatype_name& o) = default;
+    datatype_name(datatype_name&& o) = default;
+};
+
+std::ostream& operator<<(std::ostream& os, const datatype_name& n) {
+    return os << "(" << n.mpi_name << "," << n.c_name << "," << n.typeid_name << ")";
+}
+
+// define reverse mapping of datatypes for type decoding
+#define MXX_INSERT_NAME_INTO_MAP(ctype, mpi_type) \
+m.emplace(mpi_type, datatype_name(#mpi_type, #ctype, typeid(ctype).name()))
+
+class builtin_typename_map {
+private:
+    static std::unordered_map<MPI_Datatype, datatype_name> init_map() {
+        std::unordered_map<MPI_Datatype, datatype_name> m;
+        MXX_FOR_ALL_BUILTIN(MXX_INSERT_NAME_INTO_MAP);
+        return m;
+    }
+
+public:
+    static std::unordered_map<MPI_Datatype, datatype_name>& get_map() {
+        // C++11 standard guarantuess that a static variable gets instantiated
+        // in a threadsafe manner
+        static std::unordered_map<MPI_Datatype, datatype_name> m = init_map();
+        return m;
+    }
+    static std::string get_typeid_name(const MPI_Datatype& dt) {
+        return get_map()[dt].typeid_name;
+    }
+    static std::string get_c_name(const MPI_Datatype& dt) {
+        return get_map()[dt].c_name;
+    }
+    static std::string get_mpi_name(const MPI_Datatype& dt) {
+      return get_map()[dt].mpi_name;
+    }
+};
+
+
 
 /*********************************************************************
  *                 Pair types for MINLOC and MAXLOC                  *
@@ -476,17 +542,36 @@ struct datatype_builder<std::tuple<Types...> > {
     }
 };
 
+template <typename Derived>
+class recursive_processor {
+private:
+    template <typename M>
+    void process_one(M&& m) {
+        static_cast<Derived*>(this)->process(std::forward<M>(m));
+    }
+
+public:
+    // end of recursion
+    void process() {}
+
+    template <typename M, typename... Members>
+    void process(M&& m, Members&&...vargs) {
+        process_one(std::forward<M>(m));
+        process(std::forward<Members>(vargs)...);
+    }
+
+    // the call operator processes everything
+    template <typename... Members>
+    void operator()(Members&&...vargs) {
+      process(std::forward<Members>(vargs)...);
+    }
+};
+
 template <typename T, typename Derived>
 class datatype_builder_base {
     // saves information about the members (displacement + MPI_Datatype)
     std::map<MPI_Aint, ::mxx::datatype> members;
 public:
-
-    template <typename M>
-    void add_member(M&& m) {
-        static_cast<Derived*>(this)->add_member(std::forward<M>(m));
-    }
-
     template <typename M>
     void add_member_by_offset(size_t offset) {
         // get the underlying datatype
@@ -497,31 +582,6 @@ public:
         MXX_ASSERT(0 <= displ && displ + sizeof(M) <= sizeof(T));
         // add to map
         members[displ] = std::move(dt);
-    }
-
-    // TODO: possibly use pointer to member syntax!
-    //       which wouldn't require any instantiations
-    /*
-    template <typename M>
-    void add_member(M T::*m) {
-    }
-    */
-
-    template <typename M>
-    void add_members(M&& m) {
-        add_member(std::forward<M>(m));
-    }
-
-    template <typename M, typename... Members>
-    void add_members(M&& m, Members&&...vargs) {
-        add_member(std::forward<M>(m));
-        add_members(std::forward<Members>(vargs)...);
-    }
-
-    // the call operator adds everything as members
-    template <typename... Members>
-    void operator()(Members&&...vargs) {
-      add_members(std::forward<Members>(vargs)...);
     }
 
     // returns the datatype for all added members
@@ -555,7 +615,7 @@ public:
 };
 
 template <typename T>
-class value_datatype_builder : public datatype_builder_base<T, value_datatype_builder<T>> {
+class value_datatype_builder : public datatype_builder_base<T, value_datatype_builder<T>>, recursive_processor<value_datatype_builder<T>> {
 private:
     // reference to the type we're building the custom datatype for
     const T& that;
@@ -576,6 +636,11 @@ public:
         // byte offset from beginning of tuple
         MPI_Aint displ = elem_adr - t_adr;
         this->template add_member_by_offset<M>(displ);
+    }
+
+    template <typename M>
+    void process(M&& m) {
+        add_member(std::forward<T>(m));
     }
 };
 

@@ -4,7 +4,7 @@
 #include <type_traits>
 #include <tuple> // for all_are tuple specializations
 
-#define MXX_DEFINE_HAS_STATIC_MEMBER_OBJECT(MEMBER_NAME)                       \
+#define MXX_GENERATE_HAS_STATIC_MEMBER_OBJECT(MEMBER_NAME)                     \
 template <typename T, typename Enable = void>                                  \
 struct has_static_member_object_ ## MEMBER_NAME : std::false_type {};          \
                                                                                \
@@ -15,7 +15,7 @@ struct has_static_member_object_ ## MEMBER_NAME <T, typename std::enable_if<   \
     : std::true_type {};                                                       \
 
 
-#define MXX_DEFINE_HAS_MEMBER_OBJECT(MEMBER_NAME)                              \
+#define MXX_GENERATE_HAS_MEMBER_OBJECT(MEMBER_NAME)                            \
 template <typename T, typename Enable = void>                                  \
 struct has_member_object_ ## MEMBER_NAME : std::false_type {};                 \
                                                                                \
@@ -25,7 +25,8 @@ struct has_member_object_ ## MEMBER_NAME <T, typename std::enable_if<          \
     : std::true_type {};                                                       \
                                                                                \
 
-#define MXX_DEFINE_HAS_STATIC_MEMBER_FUNCTION(MEMBER_NAME)                     \
+
+#define MXX_GENERATE_HAS_STATIC_MEMBER_FUNCTION(MEMBER_NAME)                   \
 template <typename T, typename Sig = std::false_type, typename Enable = void>  \
 struct has_static_member_function_ ## MEMBER_NAME : std::false_type {};        \
                                                                                \
@@ -42,14 +43,8 @@ struct has_static_member_function_ ## MEMBER_NAME                              \
                           R(*)(Args...)>::value>::type>                        \
     : std::true_type {};                                                       \
 
-/*
-template <typename T>
-struct has_static_member : std::integral_constant<bool,
-    has_static_member_object<T>::value
-    || has_static_member_function<T>::value> {};
-    */
 
-#define MXX_DEFINE_HAS_MEMBER_FUNCTION(MEMBER_NAME)                            \
+#define MXX_GENERATE_HAS_MEMBER_FUNCTION(MEMBER_NAME)                          \
 template <typename T, typename Sig = std::false_type, typename Enable = void>  \
 struct has_member_function_ ## MEMBER_NAME : std::false_type {};               \
                                                                                \
@@ -66,11 +61,24 @@ struct has_member_function_ ## MEMBER_NAME <T, Func, typename std::enable_if<  \
     : std::true_type {};                                                       \
                                                                                \
 
-#define MXX_DEFINE_MEMBER_TRAITS(MEMBER_NAME) \
-        MXX_DEFINE_HAS_MEMBER_OBJECT(MEMBER_NAME) \
-        MXX_DEFINE_HAS_STATIC_MEMBER_OBJECT(MEMBER_NAME) \
-        MXX_DEFINE_HAS_MEMBER_FUNCTION(MEMBER_NAME) \
-        MXX_DEFINE_HAS_STATIC_MEMBER_FUNCTION(MEMBER_NAME)
+
+#define MXX_GENERATE_HAS_MEMBER_TYPEDEF(TYPE_NAME)                             \
+template <typename T, typename Enable = void>                                  \
+struct has_member_typedef_ ## TYPE_NAME : std::false_type {};                  \
+                                                                               \
+template <typename T>                                                          \
+struct has_member_typedef_ ## TYPE_NAME <T, typename std::enable_if<           \
+    !std::is_same<typename T:: TYPE_NAME ,void>::value>::type>                 \
+    : std::true_type {};                                                       \
+
+
+#define MXX_GENERATE_MEMBER_TRAITS(MEMBER_NAME)                                \
+        MXX_GENERATE_HAS_MEMBER_OBJECT(MEMBER_NAME)                            \
+        MXX_GENERATE_HAS_STATIC_MEMBER_OBJECT(MEMBER_NAME)                     \
+        MXX_GENERATE_HAS_MEMBER_FUNCTION(MEMBER_NAME)                          \
+        MXX_GENERATE_HAS_STATIC_MEMBER_FUNCTION(MEMBER_NAME)                   \
+        MXX_GENERATE_HAS_MEMBER_TYPEDEF(MEMBER_NAME)                           \
+
 
 /*
 template <typename T, typename Enable = void>
@@ -95,6 +103,17 @@ struct all_are<Trait, Type, Types...> : std::integral_constant<bool,
 
 template <template<typename> class Trait, typename Type>
 struct all_are<Trait, Type> : std::integral_constant<bool,
+    Trait<Type>::value> {};
+
+template <template <typename> class Trait, typename... Types>
+struct any_are;
+
+template <template<typename> class Trait, typename Type, typename... Types>
+struct any_are<Trait, Type, Types...> : std::integral_constant<bool,
+    Trait<Type>::value || any_are<Trait, Types...>::value> {};
+
+template <template<typename> class Trait, typename Type>
+struct any_are<Trait, Type> : std::integral_constant<bool,
     Trait<Type>::value> {};
 
 // specialization for std::tuple

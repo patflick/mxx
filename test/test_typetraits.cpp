@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Georgia Institute of Technology
+ * Copyright 2016 Georgia Institute of Technology
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,8 @@
 
 #define MEMBER_NAME test_member
 
-MXX_DEFINE_MEMBER_TRAITS(test_member)
+// generate all member traits for member with name `test_member`
+MXX_GENERATE_MEMBER_TRAITS(test_member)
 
 struct no_member {
 };
@@ -80,6 +81,14 @@ struct multi_mixed_funcs {
     int MEMBER_NAME(int, int) { return 0;}
 };
 
+struct typedef_member {
+    typedef char MEMBER_NAME [2];
+};
+
+struct using_member {
+    using MEMBER_NAME = float;
+};
+
 
 TEST(MxxExperimentalTypeTraits, static_objects) {
     // classes with static objects
@@ -130,12 +139,12 @@ TEST(MxxExperimentalTypeTraits, unique_static_function) {
 }
 
 TEST(MxxExperimentalTypeTraits, typed_static_function) {
-    // classes with unique static function
+    // classes with static function void()
     EXPECT_TRUE((has_static_member_function_test_member<static_func, void()>::value));
     EXPECT_TRUE((has_static_member_function_test_member<multiple_static_funcs, void()>::value));
     EXPECT_TRUE((has_static_member_function_test_member<multi_mixed_funcs,void()>::value));
 
-    // classes without unique static function
+    // classes without static function void()
     EXPECT_FALSE((has_static_member_function_test_member<static_obj,void()>::value));
     EXPECT_FALSE((has_static_member_function_test_member<static_const_obj,void()>::value));
     EXPECT_FALSE((has_static_member_function_test_member<static_constexpr_obj,void()>::value));
@@ -146,10 +155,10 @@ TEST(MxxExperimentalTypeTraits, typed_static_function) {
 }
 
 TEST(MxxExperimentalTypeTraits, unique_member_function) {
-    // classes with unique static function
+    // classes with unique member function
     EXPECT_TRUE(has_member_function_test_member<nonstatic_func>::value);
 
-    // classes without unique static function
+    // classes without unique member function
     EXPECT_FALSE(has_member_function_test_member<static_obj>::value);
     EXPECT_FALSE(has_member_function_test_member<static_const_obj>::value);
     EXPECT_FALSE(has_member_function_test_member<static_constexpr_obj>::value);
@@ -162,12 +171,12 @@ TEST(MxxExperimentalTypeTraits, unique_member_function) {
 }
 
 TEST(MxxExperimentalTypeTraits, typed_member_function) {
-    // classes with unique static function
+    // classes with member function void(int)
     EXPECT_TRUE((has_member_function_test_member<nonstatic_func,void(int) const>::value));
     EXPECT_TRUE((has_member_function_test_member<multiple_funcs,void(int)>::value));
     EXPECT_TRUE((has_member_function_test_member<const volatile multi_mixed_funcs,void(int)>::value));
 
-    // classes without unique static function
+    // classes without member function void(int)
     EXPECT_FALSE((has_member_function_test_member<static_obj,void(int)>::value));
     EXPECT_FALSE((has_member_function_test_member<static_const_obj,void(int)>::value));
     EXPECT_FALSE((has_member_function_test_member<static_constexpr_obj,void(int)>::value));
@@ -178,12 +187,12 @@ TEST(MxxExperimentalTypeTraits, typed_member_function) {
 }
 
 TEST(MxxExperimentalTypeTraits, const_typed_member_function) {
-    // classes with unique static function
+    // classes with member function `void(int) const`
     EXPECT_TRUE((has_member_function_test_member<const nonstatic_func,void(int) const>::value));
     EXPECT_TRUE((has_member_function_test_member<multiple_funcs,void(int) const>::value));
     EXPECT_TRUE((has_member_function_test_member<multi_mixed_funcs,void(int) const>::value));
 
-    // classes without unique static function
+    // classes without member function `void(int) const`
     EXPECT_FALSE((has_member_function_test_member<static_obj,void(int) const>::value));
     EXPECT_FALSE((has_member_function_test_member<static_const_obj,void(int) const>::value));
     EXPECT_FALSE((has_member_function_test_member<static_constexpr_obj,void(int) const>::value));
@@ -191,5 +200,23 @@ TEST(MxxExperimentalTypeTraits, const_typed_member_function) {
     EXPECT_FALSE((has_member_function_test_member<static_func, void(int) const>::value));
     EXPECT_FALSE((has_member_function_test_member<multiple_static_funcs, void(int) const>::value));
     EXPECT_FALSE((has_member_function_test_member<nonstatic_obj,void(int) const>::value));
+}
+
+TEST(MxxExperimentalTypeTraits, typedef_member) {
+    // classes with the typedef `test_member`
+    EXPECT_TRUE(has_member_typedef_test_member<typedef_member>::value);
+    EXPECT_TRUE(has_member_typedef_test_member<using_member>::value);
+
+    // classes without typedef
+    EXPECT_FALSE(has_member_typedef_test_member<nonstatic_func>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<static_obj>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<static_const_obj>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<static_constexpr_obj>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<no_member>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<nonstatic_obj>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<static_func>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<multiple_funcs>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<multiple_static_funcs>::value);
+    EXPECT_FALSE(has_member_typedef_test_member<multi_mixed_funcs>::value);
 }
 
