@@ -196,15 +196,33 @@ struct buffer_decl {
     typedef buf_instance<buffer_decl<T, U, S>> instance_type;
 
     // pointer to member
-    S T::* size;
-    U* T::* buf;
+    S T::* m_size;
+    U* T::* m_buf;
 
     instance_type instance_wrapper(T& t) {
        return instance_type(*this, t);
     }
 
-    constexpr buffer_decl(S T::* size, U* T::* buf) : size(size), buf(buf) {}
-    constexpr buffer_decl(const buffer_decl& o) : size(o.size), buf(o.buf) {}
+    inline size_type size(const T& instance) const {
+        return instance.*m_size;
+    }
+
+    inline const value_type* data(const T& instance) const {
+       return instance.*m_buf;
+    }
+
+    inline value_type* data(T& instance) const {
+       return instance.*m_buf;
+    }
+
+    inline void resize(T& instance, size_type size) {
+       // TODO dealloc?
+       instance.*m_size = size;
+       instance.*m_buf = new value_type[size];
+    }
+
+    constexpr buffer_decl(S T::* size, U* T::* buf) : m_size(size), m_buf(buf) {}
+    constexpr buffer_decl(const buffer_decl& o) : m_size(o.size), m_buf(o.buf) {}
 };
 
 
@@ -334,7 +352,7 @@ struct is_simple_type_helper<T, typename std::enable_if<
    > {};
 
 template <typename T>
-struct is_simple_type : public is_simple_type_helper<T> {};
+struct is_simple_type : is_simple_type_helper<T> {};
 
 
 template <typename T, typename Alloc>

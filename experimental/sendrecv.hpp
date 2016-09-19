@@ -10,7 +10,7 @@
 namespace mxx {
 
 template <typename T>
-typename std::enable_if<mxx::is_trivial_type<T>::value, void>::type
+typename std::enable_if<mxx::is_simple_type<T>::value, void>::type
 sendrecv(const T* send_data, size_t send_count, int target, T* recv_buf, size_t recv_count, int src, const mxx::comm& c) {
     mxx::datatype dt = mxx::get_datatype<T>();
     if (send_count >= mxx::max_int || recv_count >= mxx::max_int) {
@@ -26,7 +26,7 @@ sendrecv(const T* send_data, size_t send_count, int target, T* recv_buf, size_t 
 
 
 template <typename T>
-typename std::enable_if<mxx::is_trivial_type<T>::value, T>::type
+typename std::enable_if<mxx::is_simple_type<T>::value, T>::type
 sendrecv(const T& value, int target, int src, const mxx::comm& c) {
     mxx::datatype dt = mxx::get_datatype<T>();
     T result = T();

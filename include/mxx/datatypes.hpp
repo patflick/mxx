@@ -296,7 +296,7 @@ struct datatype_name {
     datatype_name(datatype_name&& o) = default;
 };
 
-std::ostream& operator<<(std::ostream& os, const datatype_name& n) {
+inline std::ostream& operator<<(std::ostream& os, const datatype_name& n) {
     return os << "(" << n.mpi_name << "," << n.c_name << "," << n.typeid_name << ")";
 }
 
