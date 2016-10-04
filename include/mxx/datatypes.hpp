@@ -36,6 +36,7 @@
 #include <type_traits>
 #include <typeinfo>
 #include <unordered_map>
+#include <iostream>
 
 #include "common.hpp"
 #include "type_traits.hpp"
