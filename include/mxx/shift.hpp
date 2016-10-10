@@ -119,7 +119,7 @@ std::vector<T> right_shift(const std::vector<T>& v, const mxx::comm& comm = mxx:
         // send my most right element to the right
         MPI_Send(const_cast<T*>(&v[0]),v.size() , dt.type(), comm.rank()+1, tag, comm);
     }
-    if (comm.rank() > 0) {
+    if (comm.rank() > 0 && left_size > 0) {
         // wait for the async receive to finish
         MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
     }
@@ -208,7 +208,7 @@ std::vector<T> left_shift(const std::vector<T>& v, const mxx::comm& comm = mxx::
         // send my most right element to the right
         MPI_Send(const_cast<T*>(&v[0]), v.size(), dt.type(), comm.rank()-1, tag, comm);
     }
-    if (comm.rank() < comm.size()-1) {
+    if (comm.rank() < comm.size()-1 && right_size > 0) {
         // wait for the async receive to finish
         MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
     }
@@ -243,7 +243,7 @@ std::basic_string<CharT> left_shift(const std::basic_string<CharT>& str, const m
         // send my most right element to the right
         MPI_Send(const_cast<CharT*>(&str[0]), str.size(), dt.type(), comm.rank()-1, tag, comm);
     }
-    if (comm.rank() < comm.size()-1) {
+    if (comm.rank() < comm.size()-1 && right_size > 0) {
         // wait for the async receive to finish
         MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
     }
