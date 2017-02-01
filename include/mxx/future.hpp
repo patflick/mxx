@@ -74,8 +74,19 @@ public:
         return m_requests[i];
     }
 
-    void wait() {
+    void waitall() {
         MPI_Waitall(m_requests.size(), &m_requests[0], MPI_STATUSES_IGNORE);
+    }
+
+    void wait() {
+        this->waitall();
+    }
+
+    // adds all requests from `r` into this requests object
+    void insert(requests& r) {
+        // `steal` the requests
+        m_requests.insert(m_requests.end(), r.m_requests.begin(), r.m_requests.end());
+        r.m_requests.clear();
     }
 
     bool test() {
@@ -87,11 +98,7 @@ public:
     // TODO: functions to access/return `MPI_Status`
 
     virtual ~requests() {
-        // TODO: just use waitall again?
-        for (MPI_Request& r : m_requests) {
-            if (r != MPI_REQUEST_NULL)
-                MPI_Request_free(&r);
-        }
+        this->waitall();
     }
 
 private:
