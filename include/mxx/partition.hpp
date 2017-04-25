@@ -52,6 +52,10 @@ public:
         return n/p + ((static_cast<index_t>(rank) < (n % static_cast<index_t>(p))) ? 1 : 0);
     }
 
+    inline index_t global_size() const {
+        return n;
+    }
+
     index_t local_size(int rank)
     {
         return n/p + ((static_cast<index_t>(rank) < (n % static_cast<index_t>(p))) ? 1 : 0);
@@ -135,6 +139,10 @@ public:
         return div + (static_cast<index_t>(rank) < mod ? 1 : 0);
     }
 
+    inline index_t global_size() const {
+        return n;
+    }
+
     index_t prefix_size()
     {
         return prefix + loc_size;
@@ -158,8 +166,6 @@ public:
     // which processor the element with the given global index belongs to
     int target_processor(index_t global_index)
     {
-        // TODO: maybe also buffer (div+1)*mod, would save one multiplication
-        // in each call to this
         if (global_index < div1mod)
         {
             // a_i is within the first n % p processors

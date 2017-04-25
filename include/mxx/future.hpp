@@ -89,6 +89,13 @@ public:
         r.m_requests.clear();
     }
 
+    // adds all requests from `r` into this requests object
+    void insert(requests&& r) {
+        // `steal` the requests
+        m_requests.insert(m_requests.end(), r.m_requests.begin(), r.m_requests.end());
+        r.m_requests.clear();
+    }
+
     bool test() {
         int flag;
         MPI_Testall(m_requests.size(), &m_requests[0], &flag, MPI_STATUSES_IGNORE);
