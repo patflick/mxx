@@ -224,6 +224,16 @@ public:
         return m_rank;
     }
 
+    /// Returns wether this process is rank 0 in the communicator
+    bool is_first() const {
+        return m_rank == 0;
+    }
+
+    /// Returns whether this process has `rank == size-1` in this communicator
+    bool is_last() const {
+        return m_rank == m_size - 1;
+    }
+
     /// Collective barrier call for all processes in `this` communicator.
     void barrier() const {
         MPI_Barrier(this->mpi_comm);

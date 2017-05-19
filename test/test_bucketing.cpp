@@ -55,8 +55,10 @@ TEST(MxxAlgos, BucketingBenchmark) {
     std::vector<size_t> counts_inplace = mxx::bucketing_inplace(input, func, b);
     std::cout << "Inplace Bucketing: " << STOP_MS(start_inplace) << "ms" << std::endl;
 
+    /*
     input = ref;
     auto start_tony = std::chrono::steady_clock::now();
     std::vector<size_t> counts_tony = mxx::bucketing_tony(input, func, b);
     std::cout << "Tony Bucketing: " << STOP_MS(start_tony) << "ms" << std::endl;
+    */
 }
