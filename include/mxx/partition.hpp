@@ -25,7 +25,10 @@
 #define MXX_PARTITION_HPP
 
 #include <vector>
-#include "assert.h"
+#include <cstddef>
+#include <assert.h>
+
+#include "comm.hpp"
 
 namespace mxx
 {
@@ -35,6 +38,7 @@ namespace partition
 // We want inlined non virtual functions for the partition. We thus need to use
 // templating when these classes are used and no real inheritance to enforce
 // the API.
+#if 0
 template <typename index_t>
 class block_decomposition
 {
@@ -197,34 +201,205 @@ private:
     /// number of elements on processors with one more element
     index_t div1mod; // = (n/p + 1)*(n % p)
 };
+#endif
 } // namespace partition
 
-/**
- * @brief Returns a block partitioning of an input of size `n` among `p` processors.
- *
- * @param n The number of elements.
- * @param p The number of processors.
- *
- * @return A vector of the number of elements for each processor.
- */
+
+// rough interface for distribution of data elements over the processors of a
+// communicator
+class dist_base {
+protected:
+    unsigned int m_comm_size, m_comm_rank;
+    size_t m_global_size;
+
+    dist_base() : m_comm_size(0), m_comm_rank(0), m_global_size(0) {}
+
+    dist_base(size_t global_size, const mxx::comm& comm) :
+        m_comm_size(comm.size()), m_comm_rank(comm.rank()), m_global_size(global_size) {
+    }
+
+    dist_base(size_t global_size, int comm_size, int comm_rank) :
+        m_comm_size(comm_size), m_comm_rank(comm_rank), m_global_size(global_size) {
+    }
+
+public:
+    inline size_t global_size() const {
+        return m_global_size;
+    }
+
+    inline int comm_size() const {
+        return m_comm_size;
+    }
+
+    inline int comm_rank() const {
+        return m_comm_rank;
+    }
+
+    /* need to be implemented by all deriving classes
+    // simple size and prefix queries
+    inline size_t local_size() const;
+    inline size_t local_size(int rank) const;
+    inline size_t global_size() const;
+    inline size_t eprefix_size() const;
+    inline size_t iprefix_size() const;
+    inline size_t eprefix_size(int rank) const;
+    inline size_t iprefix_size(int rank) const;
+
+    // rank and gidx translations
+    inline int    rank_of(size_t gidx) const;
+    inline size_t lidx_of(size_t gidx) const;
+    inline size_t gidx_of(int rank, size_t lidx) const;
+    */
+};
+
 /*
-std::vector<int> block_partition(int n, int p)
-{
-    // init result
-    std::vector<int> partition(p);
-    // get the number of elements per processor
-    int local_size = n / p;
-    // and the elements that are not evenly distributable
-    int remaining = n % p;
-    for (int i = 0; i < p; ++i) {
-        if (i < remaining) {
-            partition[i] = local_size + 1;
+ * TODO:
+ * move simple bare queries to easier base class:
+ * local_size(), global_size(), eprefix_size(), iprefix_size()
+ */
+
+
+class blk_dist_buf : public dist_base {
+public:
+    using dist_base::global_size;
+
+    ~blk_dist_buf () {}
+
+    /// collective allreduce for global size
+    /*
+    blk_dist_buf(const mxx::comm& comm, size_t local_size)
+        : dist_base(comm, local_size),
+          n(mxx::allreduce(local_size, comm)),
+          div(n / m_comm_size), mod(n % m_comm_size),
+          prefix(div*m_comm_rank + std::min<size_t>(mod, m_comm_rank)),
+          div1mod((div+1)*mod)
+    {
+        assert(local_size == div + (m_comm_rank < mod ? 1 : 0));
+    }
+    */
+
+    blk_dist_buf() = default;
+
+    blk_dist_buf(size_t global_size, unsigned int comm_size, unsigned int comm_rank)
+        : dist_base(global_size, comm_size, comm_rank),
+          div(global_size / comm_size), mod(global_size % comm_size),
+          m_local_size(div + (comm_rank < mod ? 1 : 0)),
+          m_prefix(div*m_comm_rank + std::min<size_t>(mod, m_comm_rank)),
+          div1mod((div+1)*mod) {
+    }
+
+    blk_dist_buf(size_t global_size, const mxx::comm& comm)
+        : blk_dist_buf(global_size, comm.size(), comm.rank()) {}
+
+    // default copy and move
+    blk_dist_buf(blk_dist_buf&&) = default;
+    blk_dist_buf(const blk_dist_buf&) = default;
+    blk_dist_buf& operator=(const blk_dist_buf&) = default;
+    blk_dist_buf& operator=(blk_dist_buf&&) = default;
+
+    inline size_t local_size() const {
+        return m_local_size;
+    }
+
+    inline size_t local_size(unsigned int rank) const {
+        return div + (rank < mod ? 1 : 0);
+    }
+
+    inline size_t iprefix_size() const {
+        return m_prefix + m_local_size;
+    }
+
+    inline size_t iprefix_size(unsigned int rank) const {
+        return div*(rank+1) + std::min<size_t>(mod, rank + 1);
+    }
+
+    inline size_t eprefix_size() const {
+        return m_prefix;
+    }
+
+    inline size_t eprefix_size(unsigned int rank) const {
+        return div*rank + std::min<size_t>(mod, rank);
+    }
+
+    // which processor the element with the given global index belongs to
+    inline int rank_of(size_t gidx) const {
+        if (gidx < div1mod) {
+            // a_i is within the first n % p processors
+            return gidx/(div+1);
         } else {
-            partition[i] = local_size;
+            return mod + (gidx - div1mod)/div;
         }
     }
-    return partition;
-}
+
+    inline size_t lidx_of(size_t gidx) const {
+        return gidx - eprefix_size(rank_of(gidx));
+    }
+
+    inline size_t gidx_of(int rank, size_t lidx) const {
+        return eprefix_size(rank) + lidx;
+    }
+
+private:
+    /* data */
+    // derived/buffered values (for faster computation of results)
+    size_t div; // = n/p
+    size_t mod; // = n%p
+    // local size (number of local elements)
+    size_t m_local_size;
+    // the exclusive prefix (number of elements on previous processors)
+    size_t m_prefix;
+    /// number of elements on processors with one more element
+    size_t div1mod; // = (n/p + 1)*(n % p)
+};
+
+
+using blk_dist = blk_dist_buf;
+
+
+// simplified block distr: equal number of elements on each processor:
+// exactly n/p (e.g.: the required input to bitonic sort)
+// TODO: adapt and finish this:
+/*
+class eq_dist : public dist_base {
+public:
+    eq_dist(const mxx::comm& comm, size_t local_size) : dist_base(comm, local_size) {}
+
+    inline size_t local_size(int) {
+        return dist_base::local_size();
+    }
+
+    inline size_t global_size() const {
+        return dist_base::local_size() * comm_size();
+    }
+
+    inline size_t eprefix() const {
+        return m_local_size * m_comm_rank;
+    }
+
+    inline size_t iprefix() const {
+        return m_local_size * (m_comm_rank + 1);
+    }
+
+    inline size_t eprefix(int rank) const {
+        return m_local_size * rank;
+    }
+
+    inline size_t iprefix(int rank) const {
+        return m_local_size * (rank + 1);
+    }
+
+    inline int    rank_of(size_t gidx) const {
+        return gidx / m_local_size;
+    }
+
+    inline size_t lidx_of(size_t gidx) const {
+        return gidx % m_local_size;
+    }
+
+    inline size_t gidx_of(int rank, size_t lidx) const {
+        return m_local_size * rank + lidx;
+    }
+};
 */
 
 } // namespace mxx

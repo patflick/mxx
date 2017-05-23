@@ -26,6 +26,7 @@
 #include <mpi.h>
 
 #include <vector>
+#include <cstddef>
 #include <queue>
 #include "assert.h"
 
@@ -63,7 +64,7 @@ template<typename _InIterator, typename _OutIterator>
         std::pair<size_t, int> max_pos = mxx::max_element(local_size, comm);
         int root = max_pos.second;
         MXX_ASSERT(mxx::all_same(root, comm));
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
+        blk_dist part(total_size, comm.size(), comm.rank());
 
 
         if (comm.rank() == root) {
@@ -95,8 +96,8 @@ void stable_distribute(_InIterator begin, _InIterator end, _OutIterator out, con
     }
 
     // get local and global size
-    std::size_t local_size = std::distance(begin, end);
-    std::size_t total_size = mxx::allreduce(local_size, comm);
+    size_t local_size = std::distance(begin, end);
+    size_t total_size = mxx::allreduce(local_size, comm);
 
     if (total_size == 0) {
         return;
@@ -107,15 +108,15 @@ void stable_distribute(_InIterator begin, _InIterator end, _OutIterator out, con
         impl::distribute_scatter(begin, end, out, total_size, comm);
     } else {
         // get prefix sum of size and total size
-        std::size_t prefix = mxx::exscan(local_size, comm);
+        size_t prefix = mxx::exscan(local_size, comm);
 
         // calculate where to send elements
         std::vector<size_t> send_counts(comm.size(), 0);
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
-        int first_p = part.target_processor(prefix);
-        std::size_t left_to_send = local_size;
+        blk_dist part(total_size, comm.size(), comm.rank());
+        int first_p = part.rank_of(prefix);
+        size_t left_to_send = local_size;
         for (; left_to_send > 0 && first_p < comm.size(); ++first_p) {
-            std::size_t nsend = std::min<std::size_t>(part.prefix_size(first_p) - prefix, left_to_send);
+            size_t nsend = std::min<size_t>(part.iprefix_size(first_p) - prefix, left_to_send);
             send_counts[first_p] = nsend;
             left_to_send -= nsend;
             prefix += nsend;
@@ -216,7 +217,7 @@ void distribute(_InIterator begin, _InIterator end, _OutIterator out, const mxx:
         //       paired processes
 
         // get surplus
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
+        blk_dist part(total_size, comm.size(), comm.rank());
         impl::signed_size_t surplus = (impl::signed_size_t)local_size - (impl::signed_size_t)part.local_size();
 
         // allgather surpluses
@@ -252,7 +253,7 @@ struct distribute_container {
         // TODO: this allreduce is duplicated in the `stable_distribute` function
         //       which could be avoided
         size_t total_size = mxx::allreduce(local_size, comm);
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
+        blk_dist part(total_size, comm.size(), comm.rank());
         result.resize(part.local_size());
 
         // call the iterator based implementation
@@ -276,7 +277,7 @@ struct distribute_container {
         // TODO: this allreduce is duplicated in the `distribute` function
         //       which could be avoided
         size_t total_size = mxx::allreduce(local_size, comm);
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
+        blk_dist part(total_size, comm.size(), comm.rank());
         result.resize(part.local_size());
 
         // call the iterator based implementation
@@ -297,7 +298,7 @@ struct distribute_container {
         // get sizes
         size_t local_size = c.size();
         size_t total_size = mxx::allreduce(local_size, comm);
-        partition::block_decomposition<std::size_t> part(total_size, comm.size(), comm.rank());
+        blk_dist part(total_size, comm.size(), comm.rank());
 
         if (mxx::any_of(local_size == total_size, comm)) {
             // use scatterv instead of all2all based communication
@@ -401,9 +402,9 @@ void distribute_inplace(std::basic_string<CharT, Traits, Alloc>& local_string, c
  *        into the decomposition given by the requested local_size
  */
 template<typename _InIterator, typename _OutIterator>
-void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator out, std::size_t new_local_size, const mxx::comm& comm) {
+void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator out, size_t new_local_size, const mxx::comm& comm) {
     // get local size
-    std::size_t local_size = std::distance(begin, end);
+    size_t local_size = std::distance(begin, end);
 
     // if single process, simply copy to output
     if (comm.size() == 1) {
@@ -428,7 +429,7 @@ void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator o
     if(comm.rank() == 0)
       std::cerr << " Decomposition: old [" << min << "," << max << "], new= [" << min_new << "," << max_new << "], for n=" << total_size << " fair decomposition: " << total_size / comm.size() << std::endl;
 
-    std::vector<std::size_t> toReceive = mxx::gather(new_local_size, 0, comm);
+    std::vector<size_t> toReceive = mxx::gather(new_local_size, 0, comm);
     if(comm.rank() == 0)
       std::cerr << toReceive << std::endl;
 #endif
@@ -436,13 +437,13 @@ void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator o
     // get the new local sizes from all processors
     // NOTE: this all-gather is what makes the arbitrary decomposition worse
     // in terms of complexity than when assuming a block decomposition
-    std::vector<std::size_t> new_local_sizes = mxx::allgather(new_local_size, comm);
+    std::vector<size_t> new_local_sizes = mxx::allgather(new_local_size, comm);
     MXX_ASSERT(std::accumulate(new_local_sizes.begin(), new_local_sizes.end(), static_cast<size_t>(0)) == total_size);
 
     // calculate where to send elements
     std::vector<size_t> send_counts(comm.size(), 0);
     int first_p;
-    std::size_t new_prefix = 0;
+    size_t new_prefix = 0;
     for (first_p = 0; first_p < comm.size()-1; ++first_p)
     {
         // find processor for which the prefix sum exceeds mine
@@ -453,14 +454,14 @@ void redo_arbit_decomposition(_InIterator begin, _InIterator end, _OutIterator o
     }
 
     //= block_partition_target_processor(total_size, p, prefix);
-    std::size_t left_to_send = local_size;
+    size_t left_to_send = local_size;
     for (; left_to_send > 0 && first_p < comm.size(); ++first_p)
     {
         // make the `new` prefix inclusive (is an exlcusive prefix prior)
         new_prefix += new_local_sizes[first_p];
         // send as many elements to the current processor as it needs to fill
         // up, but at most as many as I have left
-        std::size_t nsend = std::min<std::size_t>(new_prefix - prefix, left_to_send);
+        size_t nsend = std::min<size_t>(new_prefix - prefix, left_to_send);
         send_counts[first_p] = nsend;
         // update the number of elements i have left (`left_to_send`) and
         // at which global index they start `prefix`
@@ -485,13 +486,13 @@ _Iterator stable_block_decompose_partitions(_Iterator begin, _Iterator mid, _Ite
         return mid;
 
     // get sizes
-    std::size_t left_local_size = std::distance(begin, mid);
-    std::size_t right_local_size = std::distance(mid, end);
+    size_t left_local_size = std::distance(begin, mid);
+    size_t right_local_size = std::distance(mid, end);
     // TODO: use array of 2 (single reduction!)
-    std::size_t left_size = mxx::allreduce(left_local_size, comm);
-    std::size_t right_size = mxx::allreduce(right_local_size, comm);
-    partition::block_decomposition<std::size_t> part(left_size+right_size, comm.size(), comm.rank());
-    partition::block_decomposition<std::size_t> left_part(left_size, comm.size(), comm.rank());
+    size_t left_size = mxx::allreduce(left_local_size, comm);
+    size_t right_size = mxx::allreduce(right_local_size, comm);
+    blk_dist part(left_size+right_size, comm.size(), comm.rank());
+    blk_dist left_part(left_size, comm.size(), comm.rank());
 
     // shuffle into buffer
     std::vector<T> buffer(part.local_size());
@@ -514,7 +515,7 @@ _Iterator block_decompose_partitions(_Iterator begin, _Iterator mid, _Iterator e
     // get sizes
     size_t left_local_size = std::distance(begin, mid);
     size_t left_size = mxx::allreduce(left_local_size, comm);
-    partition::block_decomposition<std::size_t> left_part(left_size, comm.size(), comm.rank());
+    blk_dist left_part(left_size, comm.size(), comm.rank());
     impl::signed_size_t surplus = (impl::signed_size_t)left_local_size - (impl::signed_size_t)left_part.local_size();
     bool fits = end-begin >= left_part.local_size();
     bool all_fits = mxx::all_of(fits, comm);
@@ -527,7 +528,7 @@ _Iterator block_decompose_partitions(_Iterator begin, _Iterator mid, _Iterator e
     // get send counts
     std::vector<size_t> send_counts = impl::surplus_send_pairing(surpluses, comm.size(), comm.rank(), true);
 
-    std::size_t send_size = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+    size_t send_size = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
     std::vector<T> buffer;
     if (send_size > 0)
         buffer.resize(send_size);

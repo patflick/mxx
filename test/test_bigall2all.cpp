@@ -35,13 +35,13 @@ void test_all2all(std::size_t input_size, MPI_Comm comm)
     MPI_Comm_size(comm, &p);
     MPI_Comm_rank(comm, &rank);
     // get local size
-    mxx::partition::block_decomposition<std::size_t> part(input_size, p, rank);
+    mxx::blk_dist part(input_size, p, rank);
     // generate local input
     std::size_t local_size = part.local_size();
 
     // create "random" send counts
     std::vector<count_t> send_counts(p);
-    mxx::partition::block_decomposition<std::size_t> local_part(local_size, p, rank);
+    mxx::blk_dist local_part(local_size, p, rank);
     for (int i = 0; i < p-1; ++i)
     {
         std::size_t s = rand_around(local_part.local_size(), 10);
@@ -64,7 +64,7 @@ void test_all2all(std::size_t input_size, MPI_Comm comm)
 
     // execute all2all
     std::vector<count_t> expected_recv = mxx::all2all(send_counts);
-    std::vector<element_t> results = mxx::all2all(local_els, send_counts);
+    std::vector<element_t> results = mxx::all2allv(local_els, send_counts, comm);
 
     // check all my elements
     count_t exp_recv_n = std::accumulate(expected_recv.begin(), expected_recv.end(), 0);

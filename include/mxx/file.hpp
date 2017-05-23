@@ -94,10 +94,10 @@ std::string file_block_decompose(const char* filename, MPI_Comm comm = MPI_COMM_
     // processor)
     if (max_local_size > 0 && file_size / p > max_local_size)
         file_size = p*max_local_size;
-    partition::block_decomposition<std::size_t> part(file_size, p, rank);
+    blk_dist part(file_size, p, rank);
     // block decompose
     std::size_t local_size = part.local_size();
-    std::size_t offset = part.excl_prefix_size();
+    std::size_t offset = part.eprefix_size();
 
     // open file
     std::ifstream t(filename);
