@@ -336,7 +336,7 @@ public:
     inline mxx::future<void> isend(const T& msg, int dest, int tag = 0) const {
         MXX_ASSERT(sizeof(T) < mxx::max_int);
         MXX_ASSERT(0 <= dest && dest < this->size());
-        mxx::datatype dt = mxx::get_datatype<T>;
+        mxx::datatype dt = mxx::get_datatype<T>();
         mxx::future_builder<void> f;
         MPI_Isend(const_cast<T*>(&msg), 1, dt.type(), dest, tag, this->mpi_comm, &f.add_request());
         return f.get_future();
