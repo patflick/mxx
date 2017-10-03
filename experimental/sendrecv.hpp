@@ -35,21 +35,116 @@ sendrecv(const T& value, int target, int src, const mxx::comm& c) {
     return result;
 }
 
+// TODO: get buffers via decltype(T::datatype), filter by buffers?
+// TODO:
+// TODO
+// TODO
+//
+template <typename T>
+struct buffer_type_helper;
+
 template <typename... Buffers>
-struct buffer_type_helper {
-    typedef std::tuple<typename Buffers::size_type...> size_tuple_type;
+struct buffer_type_helper<types<Buffers...>> {
+    typedef types<typename Buffers::size_type...> size_types;
+    typedef types<typename Buffers::value_type...> value_types;
+};
+
+
+
+template <typename Caller, typename T, typename... Args>
+struct return_type_helper {
+    using type = decltype(std::declval<Caller>()(std::declval<T>(), std::forward<Args>(std::declval<Args>())...));
+};
+
+
+
+// call member functions on generic types inside a tuple
+template <typename Tuple, template<typename> class type_trait, typename Caller>
+struct filtered_tuple_caller;
+
+template <template<typename> class type_trait, typename Caller, typename... Types>
+struct filtered_tuple_caller<std::tuple<Types...>, type_trait, Caller> {
+    using indeces = typename indeces_of<type_trait, Types...>::seq;
+
+    // TODO determine return type via indeces
+
+    template <typename... Args>
+    auto call_all(std::tuple<Types...>& t, Caller&& caller, Args&&...args) -> void {
+    }
+};
+
+
+template <typename T>
+struct buffers_size_getter {
+    template <typename B, typename... Args>
+    auto size_getter(const B& b, Args&&... args) -> decltype(b.size(std::forward<Args>(args)...)) {
+        return b.size(std::forward<Args>(args)...);
+    }
+
+    // TODO: call the function above for all buffer types in get_type_declarator<T>()
+    // ideally: given a trait and a getter class, return a tuple with the values returned by the getters
+
+    // 1) get index list from trait!
+    using buffer_indeces = typename indeces_of<is_buffer, typename types_from_tuple<decltype(get_datatype_descriptor<T>())>::type>::seq;
+
+    static constexpr auto descriptor = get_datatype_descriptor<T>();
+    
+    // 2) use index list to populate output tuple (recursively inlining)
+    template <typename Tuple, size_t J>
+    void get_vals(Tuple&, seq_<>) {
+        // do nothing
+    }
+    template <typename Tuple, size_t J, size_t I, size_t... Seq>
+    void get_vals(Tuple& t, seq_<I, Seq...>) {
+        std::get<J>(t) = std::get<I>(descriptor).size(t);
+        get_vals<Tuple, J+1>(t, seq_<Seq...>());
+    }
+
+    template <typename Tuple>
+    void get_all_vals(Tuple& t) {
+        get_vals<Tuple, 0>(t, buffer_indeces());
+    }
 };
 
 template <typename T>
-struct buffer_helper {
+struct flat_helper {
+    using declarator_type = decltype(get_datatype_descriptor<T>());
+    using buffers = typename type_filter<is_buffer, typename types_from_tuple<declarator_type>::type>::type;
+    using buffer_sizes_type = decltype(call_all_filtered<is_buffer>(std::declval<declarator_type>(), size_caller(), std::declval<T>()));
     // TODO: get size type of all buffers in T recursively
-    std::tuple<Sizes...> get_sizes(const T& data) {
+    static buffer_sizes_type get_sizes(const T& data) {
+        return call_all_filtered<is_buffer>(get_datatype_descriptor<T>(), size_caller(), data);
     }
-    void alloc(const std::tuple<Sizes...>& sizes) {
+    void alloc(const buffer_sizes_type& sizes) {
     }
 };
 
 // TODO: design serialization API
+
+// takes buffer instance (our wrapper or std::vector, std::string)
+template <typename B>
+void sendrecv_buf(const B& buf, int target, B& recv_buf, int src, const mxx::comm& c) {
+    sendrecv(buf.data(), buf.size(), target, recv_buf.data(), recv_buf.size(), src, c);
+}
+
+
+template <typename T, size_t I>
+T sendrecv_impl_flat_buf(const T& data, int target, int src, const mxx::comm& c) {
+    // howto??
+    // recursive implementation of sub-buffers and datatype
+    // get buf <I>
+    
+}
+
+// is flat?
+template <typename T, size_t I>
+T sendrecv_impl_flat(const T& data, int target, int src, const mxx::comm& c) {
+    // TODO: get sizes
+    auto sizes = flat_helper<T>::get_sizes(data);
+
+}
+
+// else
 
 
 // TODO: using new datatype library for flat/serialized/etc

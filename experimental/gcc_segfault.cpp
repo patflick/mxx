@@ -1,4 +1,11 @@
+/*
+ * This little code snipped will segfault for gcc <= 4.8:
+ *
+ * g++ --std=c++11 gcc_segfault.cpp
+ */
+
 #include <tuple>
+#include <utility>
 #include <iostream>
 #include <typeinfo>
 
@@ -15,8 +22,5 @@ struct st {
 
 int main() {
     st t;
-
     std::cout << typeid(st::x).name() << std::endl;
-
-    //int st::* x = std::get<0>(st::x);
 }

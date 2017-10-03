@@ -42,9 +42,30 @@ template <size_t I, typename Type, typename... Types>
 struct type_at<I, Type, Types...> : type_at<I-1, Types...> {};
 
 
+template <size_t... S>
+struct seq_;
+
+
+template <size_t I, size_t... Seq>
+struct seq_getter;
+
+template <size_t I, size_t El, size_t... Seq>
+struct seq_getter<I, El, Seq...> : seq_getter<I-1, Seq...> {
+    static_assert(I <= sizeof...(Seq), "Index must be smaller than size of sequence");
+};
+
+template <size_t El, size_t... Seq>
+struct seq_getter<0, El, Seq...> : type_wrap<std::integral_constant<size_t, El>> {};
+
 // template sequence of size_t
 template <size_t... S>
-struct seq_ {};
+struct seq_ {
+    /* return the value at offset `I` */
+    template <size_t I>
+    using at = typename seq_getter<I, S...>::type;
+
+    static constexpr size_t size = sizeof...(S);
+};
 
 template <size_t N, size_t I = 0, typename Seq = seq_<>>
 struct seq;

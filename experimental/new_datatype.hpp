@@ -21,11 +21,12 @@ namespace mxx {
 
 MXX_GENERATE_HAS_STATIC_MEMBER_OBJECT(datatype)
 
+MXX_GENERATE_HAS_MEMBER_FUNCTION(size)
+
 template <typename T>
 struct datatype_descriptor {
     //static constexpr bool has_descriptor = false;
 };
-
 
 template <typename T, typename U>
 struct datatype_descriptor<std::pair<T, U>> {
@@ -33,7 +34,6 @@ struct datatype_descriptor<std::pair<T, U>> {
     // define all members
     static constexpr auto datatype = std::make_tuple(&type::first, &type::second);
 };
-
 
 // helper function to get pointers to all tuple members
 template <size_t... Seq, typename... Types>
@@ -299,7 +299,7 @@ struct custom_buffer_decl {
     constexpr custom_buffer_decl(Alloc&& a, Data&& d) : alloc_functor(a), data_functor(d), size_functor(Size()) {}
 };
 
-template <typename B, typename Enable = void>
+template <typename B>
 struct is_buffer : std::false_type {};
 
 template <typename T, typename Alloc, typename Data, typename Size>
@@ -318,7 +318,168 @@ constexpr custom_buffer_decl<T,Alloc,Data,Size> custom_buffer_tag(Alloc&& a, Dat
     return custom_buffer_decl<T, Alloc, Data, Size>(std::forward<Alloc>(a), std::forward<Data>(d), std::forward<Size>(s));
 }
 
-/* TODO: range tag and "flattening" vs serialization of ranges */
+
+template <typename... Types>
+struct types {
+    static constexpr size_t size = sizeof...(Types);
+    using tuple_type = std::tuple<Types...>;
+};
+
+template <typename, typename...>
+struct types_insert;
+
+template <typename T, typename... Types>
+struct types_insert<T, types<Types...>> {
+    using type = types<T, Types...>;
+};
+
+template <template<typename> class type_trait, typename... Types>
+struct type_filter;
+
+template <template<typename> class type_trait>
+struct type_filter<type_trait> {
+    using type = types<>;
+};
+
+template <template<typename> class type_trait, typename Type, typename... Types>
+struct type_filter<type_trait, Type, Types...> {
+    using type = typename std::conditional<type_trait<Type>::value,
+          typename types_insert<Type, typename type_filter<type_trait, Types...>::type>::type,
+          typename type_filter<type_trait, Types...>::type>::type;
+};
+
+// unpack `types`
+template <template<typename> class type_trait, typename... Types>
+struct type_filter<type_trait, types<Types...>> : type_filter<type_trait, Types...> {};
+
+template <typename...>
+struct types_from_tuple;
+
+template <typename... Types>
+struct types_from_tuple<std::tuple<Types...>> {
+    using type = types<Types...>;
+};
+
+template <typename T>
+struct get_buffer_types {
+    // TODO: can't use T::datatype, since it may be type_declarator<T>::datatype
+    // TODO: use struct to combine those
+    using type = typename type_filter<is_buffer, typename types_from_tuple<decltype(T::datatype)>::type>::type;
+};
+
+template <template<typename> class type_trait, typename Types, size_t I = 0>
+struct indeces_of;
+
+template <template<typename> class type_trait, size_t I>
+struct indeces_of<type_trait, types<>, I> {
+    using seq = seq_<>;
+};
+
+template <size_t I, typename seq>
+struct insert_num;
+
+template <size_t I, size_t... Seq>
+struct insert_num<I, seq_<Seq...>> {
+    using seq = seq_<I, Seq...>;
+};
+
+template <template<typename> class type_trait, size_t I, typename T, typename... Types>
+struct indeces_of<type_trait, types<T, Types...>, I> {
+    using seq = typename std::conditional<type_trait<T>::value,
+          typename insert_num<I, typename indeces_of<type_trait, types<Types...>, I+1>::seq>::seq,
+          typename indeces_of<type_trait, types<Types...>, I+1>::seq>::type;
+};
+
+// example for a caller function, which calls the size() function
+struct size_caller {
+    template <typename T, typename... Args>
+    auto operator()(T&& t, Args&&... args) -> decltype(t.size(std::forward<Args>(args)...)) {
+        return t.size(std::forward<Args>(args)...);
+    }
+};
+
+// TODO helper with unpack tuple arguments
+template <typename T, size_t I>
+struct unpack_if_tuple {
+   static T&& unpack(T&& t) {
+       return std::forward<T>(t);
+   }
+};
+
+// specialize for tuple
+template <size_t I, typename... Types>
+struct unpack_if_tuple<std::tuple<Types...>, I> {
+   using return_type = typename std::tuple_element<I, std::tuple<Types...>>::type;
+   static return_type&& unpack(std::tuple<Types...>& t) {
+       return std::forward<return_type>(std::get<I>(t));
+   }
+   static const return_type&& unpack(const std::tuple<Types...>& t) {
+       return std::forward<const return_type>(std::get<I>(t));
+   }
+};
+
+template <size_t I, size_t J, typename Caller, typename Tuple, typename... Args>
+auto unpack_caller(Tuple&& t, Caller&& caller, Args&&... args)
+   -> decltype(caller(std::get<I>(t), unpack_if_tuple<Args, J>::unpack(args)...)) {
+    return caller(std::get<I>(t), unpack_if_tuple<Args, J>::unpack(args)...);
+}
+
+// TODO: collapse void
+template <typename Caller, typename Tuple, typename... Args>
+struct unpack_return_type;
+
+template <typename Caller, typename... Types, typename... Args>
+struct unpack_return_type<Caller, std::tuple<Types...>, Args...>
+{
+    using return_type = std::tuple<decltype(unpack_caller<Seq, Seq2>(std::forward<Tuple>(t), std::forward<Caller>(caller), std::forward<Args>(args)...))...>;
+};
+
+template <typename Caller, size_t... Seq, size_t... Seq2, typename Tuple, typename... Args>
+auto call_all_unpack_helper(seq_<Seq...>, seq_<Seq2...>, Tuple&& t, Caller&& caller, Args&&... args)
+   -> std::tuple<decltype(unpack_caller<Seq, Seq2>(std::forward<Tuple>(t), std::forward<Caller>(caller), std::forward<Args>(args)...))...> {
+    /// return type is tuple of caller applied to each type in Types with args
+    using return_type = std::tuple<decltype(unpack_caller<Seq, Seq2>(std::forward<Tuple>(t), std::forward<Caller>(caller), std::forward<Args>(args)...))...>;
+    return return_type(unpack_caller<Seq, Seq2>(std::forward<Tuple>(t), std::forward<Caller>(caller), std::forward<Args>(args)...)...);
+};
+
+template <typename Caller, typename... Types, typename... Args>
+auto call_all_unpack(std::tuple<Types...>& t, Caller&& caller, Args&&... args)
+   -> decltype(call_all_unpack_helper(typename seq<sizeof...(Types)>::type(), typename seq<sizeof...(Types)>::type(), t, std::forward<Caller>(caller), std::forward<Args>(args)...))
+{
+   return call_all_unpack_helper(typename seq<sizeof...(Types)>::type(), typename seq<sizeof...(Types)>::type(), t, std::forward<Caller>(caller), std::forward<Args>(args)...);
+}
+
+
+template <typename Caller, size_t... Seq, typename Tuple, typename... Args>
+auto call_all_helper(seq_<Seq...>, Tuple&& t, Caller&& caller, Args&&... args) -> std::tuple<decltype(caller(std::get<Seq>(t),std::forward<Args>(args)...))...> {
+    /// return type is tuple of caller applied to each type in Types with args
+    using return_type = std::tuple<decltype(caller(std::get<Seq>(t),std::forward<Args>(args)...))...>;
+    return return_type(caller(std::get<Seq>(t),std::forward<Args>(args)...)...); // default construct result tuple
+};
+
+template <typename Caller, typename... Types, typename... Args>
+auto call_all(std::tuple<Types...>& t, Caller&& caller, Args&&... args) -> std::tuple<decltype(caller(std::declval<Types>(),std::forward<Args>(args)...))...> {
+    return call_all_helper(typename seq<sizeof...(Types)>::type(), t, std::forward<Caller>(caller), std::forward<Args>(args)...);
+};
+
+// const ref version (elements are const)
+template <typename Caller, typename... Types, typename... Args>
+auto call_all(const std::tuple<Types...>& t, Caller&& caller, Args&&... args) -> std::tuple<decltype(caller(std::declval<const Types>(),std::forward<Args>(args)...))...> {
+    return call_all_helper(typename seq<sizeof...(Types)>::type(), t, std::forward<Caller>(caller), std::forward<Args>(args)...);
+};
+
+template <template<typename> class type_trait, typename Caller, typename... Types, typename... Args>
+auto call_all_filtered(std::tuple<Types...>& t, Caller&& caller, Args&&... args)
+   -> decltype(call_all_helper(typename indeces_of<type_trait, types<Types...>>::seq(), t, std::forward<Caller>(caller), std::forward<Args>(args)...)) {
+    return call_all_helper(typename indeces_of<type_trait, types<Types...>>::seq(), t, std::forward<Caller>(caller), std::forward<Args>(args)...);
+};
+
+// this is a copy from above with `const` added
+template <template<typename> class type_trait, typename Caller, typename... Types, typename... Args>
+auto call_all_filtered(const std::tuple<Types...>& t, Caller&& caller, Args&&... args)
+   -> decltype(call_all_helper(typename indeces_of<type_trait, types<Types...>>::seq(), t, std::forward<Caller>(caller), std::forward<Args>(args)...)) {
+    return call_all_helper(typename indeces_of<type_trait, types<Types...>>::seq(), t, std::forward<Caller>(caller), std::forward<Args>(args)...);
+};
 
 
 template <typename T>

@@ -80,6 +80,32 @@ std::string demangle(const char* name) {
     return (status==0) ? res.get() : name ;
 }
 
+template <typename T>
+std::string type_name() {
+    return demangle(typeid(T).name());
+}
+
+struct Z {
+    std::string size() const {
+        return "OMG it works!";
+    }
+
+    size_t size() {
+        return 1337;
+    }
+};
+
+template <typename T>
+struct has_size_func : mxx::has_member_function_size<T, size_t()> {
+};
+
+struct resize_caller {
+    template <typename T, typename SizeT>
+    void operator()(T& t, SizeT size) {
+        t.resize(size);
+    }
+};
+
 int main(int argc, char *argv[]) {
     mxx::env e(argc, argv);
 
@@ -114,6 +140,30 @@ int main(int argc, char *argv[]) {
     std::cout << "all simple member: " << all_are<mxx::is_simple_member, std::remove_cv<my_tuple>::type>::value << std::endl;
     std::cout << "all simple member: " << all_are<mxx::is_simple_member, std::tuple<int X::*, char X::*, double X::*>>::value << std::endl;
 
-    std::cout << "datatype type: " << demangle(typeid(const my_tuple).name()) << std::endl;
+    std::cout << "datatype type: " << type_name<const my_tuple>() << std::endl;
+
+
+    using filtered_type = mxx::type_filter<std::is_arithmetic, int, float, char*, X, double>::type::tuple_type;
+    using index_list = mxx::indeces_of<std::is_arithmetic, mxx::types<int, float, char*, X, double>>::seq;
+
+    std::cout << "filtered type: " << type_name<filtered_type>() << std::endl;
+    std::cout << "filtered index: " << type_name<index_list>() << std::endl;
+
+    using test_tuple_t = std::tuple<std::vector<int>, std::string, std::map<int, std::string>, Z>;
+
+    test_tuple_t t;
+    std::get<0>(t).resize(13);
+    std::get<1>(t) = "hello!";
+    std::get<2>(t)[1] = "blah";
+    auto sizes = mxx::call_all_filtered<has_size_func>(t, mxx::size_caller());
+
+    std::cout << "sizes of type " << type_name<decltype(sizes)>() << " have value = " << sizes << std::endl;
+
+    using vec_tuple = std::tuple<std::vector<int>, std::string, std::vector<float>>;
+    vec_tuple vt;
+    
+    mxx::call_all_unpack(vt, resize_caller(), std::make_tuple(13, 17, 19));
+
+
     return 0;
 }
