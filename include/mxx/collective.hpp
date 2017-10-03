@@ -1517,7 +1517,7 @@ void all2all_func(std::vector<T>& msgs, Func target_func, const mxx::comm& comm 
     // TODO: replace with bucketing function, implemented elsewhere
     std::vector<size_t> send_counts(comm.size(), 0);
     for (auto it = msgs.begin(); it != msgs.end(); ++it) {
-        MXX_ASSERT(0 <= target_func(*it) && target_func(*it) < comm.size());
+        assert(0 <= target_func(*it) && target_func(*it) < comm.size());
         send_counts[target_func(*it)]++;
     }
     std::vector<std::size_t> offset = impl::get_displacements(send_counts);

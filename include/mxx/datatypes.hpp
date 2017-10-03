@@ -78,7 +78,6 @@ class is_builtin_type : public std::false_type {};
 
 class datatype;
 
-// TODO: there has to be a better way for this
 } // namespace mxx
 
 std::false_type make_datatype();

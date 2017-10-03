@@ -46,7 +46,7 @@ void time_samplesort(std::size_t input_size, MPI_Comm comm)
     MPI_Comm_size(comm, &p);
     MPI_Comm_rank(comm, &rank);
     mxx::timer t;
-    mxx::partition::block_decomposition<std::size_t> part(input_size, p, rank);
+    mxx::blk_dist part(input_size, p, rank);
 
     // generate local input
     std::size_t local_size = part.local_size();

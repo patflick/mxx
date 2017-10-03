@@ -90,10 +90,10 @@ template <typename _Iterator, typename _Compare>
 std::vector<typename std::iterator_traits<_Iterator>::value_type>
 sample_arbit_decomp(_Iterator begin, _Iterator end, _Compare comp, size_t s, const mxx::comm& comm) {
     typedef typename std::iterator_traits<_Iterator>::value_type value_type;
-    std::size_t local_size = std::distance(begin, end);
+    size_t local_size = std::distance(begin, end);
 
     // get total size n
-    std::size_t total_size = mxx::allreduce(local_size, comm);
+    size_t total_size = mxx::allreduce(local_size, comm);
 
     // p = number of processes
     int p = comm.size();
@@ -101,11 +101,11 @@ sample_arbit_decomp(_Iterator begin, _Iterator end, _Compare comp, size_t s, con
     //  pick a total of s*p samples, thus locally pick ceil((local_size/n)*s*p)
     //  and at least one samples from each processor.
     //  this will result in at least s*p samples.
-    std::size_t local_s;
+    size_t local_s;
     if (local_size == 0)
         local_s = 0;
     else
-        local_s = std::max<std::size_t>(((local_size*s*p)+total_size-1)/total_size, 1);
+        local_s = std::max<size_t>(((local_size*s*p)+total_size-1)/total_size, 1);
 
     MXX_ASSERT(mxx::allreduce(local_s, comm) >= p*s);
 
@@ -116,9 +116,9 @@ sample_arbit_decomp(_Iterator begin, _Iterator end, _Compare comp, size_t s, con
     if (local_s > 0) {
         local_splitters.resize(local_s);
         _Iterator pos = begin;
-        for (std::size_t i = 0; i < local_splitters.size(); ++i)
+        for (size_t i = 0; i < local_splitters.size(); ++i)
         {
-            std::size_t bucket_size = local_size / (local_s+1) + (i < (local_size % (local_s+1)) ? 1 : 0);
+            size_t bucket_size = local_size / (local_s+1) + (i < (local_size % (local_s+1)) ? 1 : 0);
             // pick last element of each bucket
             pos += (bucket_size-1);
             local_splitters[i] = *pos;
@@ -154,7 +154,7 @@ template <typename _Iterator, typename _Compare>
 std::vector<typename std::iterator_traits<_Iterator>::value_type>
 sample_block_decomp(_Iterator begin, _Iterator end, _Compare comp, size_t s, const mxx::comm& comm) {
     typedef typename std::iterator_traits<_Iterator>::value_type value_type;
-    std::size_t local_size = std::distance(begin, end);
+    size_t local_size = std::distance(begin, end);
     MXX_ASSERT(local_size > 0);
 
     // 1. samples
@@ -162,8 +162,8 @@ sample_block_decomp(_Iterator begin, _Iterator end, _Compare comp, size_t s, con
     //    subsequences in the sorted order
     std::vector<value_type> local_splitters(s);
     _Iterator pos = begin;
-    for (std::size_t i = 0; i < local_splitters.size(); ++i) {
-        std::size_t bucket_size = local_size / (s+1) + (i < (local_size % (s+1)) ? 1 : 0);
+    for (size_t i = 0; i < local_splitters.size(); ++i) {
+        size_t bucket_size = local_size / (s+1) + (i < (local_size % (s+1)) ? 1 : 0);
         // pick last element of each bucket
         pos += (bucket_size-1);
         local_splitters[i] = *pos;
@@ -193,8 +193,8 @@ std::vector<size_t> split(_Iterator begin, _Iterator end, _Compare comp, const s
     std::vector<size_t> send_counts(comm.size(), 0);
     _Iterator pos = begin;
     size_t local_size = std::distance(begin, end);
-    partition::block_decomposition<std::size_t> local_part(local_size, comm.size(), comm.rank());
-    for (std::size_t i = 0; i < splitters.size();) {
+    blk_dist local_part(local_size, comm.size(), comm.rank());
+    for (size_t i = 0; i < splitters.size();) {
         // get the number of splitters which are equal starting from `i`
         unsigned int split_by = 1;
         while (i+split_by < splitters.size()
@@ -210,11 +210,11 @@ std::vector<size_t> split(_Iterator begin, _Iterator end, _Compare comp, const s
         pos = eqr.first;
 
         // split equal elements fairly across processors
-        std::size_t eq_size = std::distance(pos, eqr.second);
+        size_t eq_size = std::distance(pos, eqr.second);
         // try to split approx equal:
-        std::size_t eq_size_split = (eq_size + send_counts[i]) / (split_by+1) + 1;
+        size_t eq_size_split = (eq_size + send_counts[i]) / (split_by+1) + 1;
         for (unsigned int j = 0; j < split_by; ++j) {
-            std::size_t out_size = 0;
+            size_t out_size = 0;
             if (send_counts[i+j] < local_part.local_size(i+j)) {
                 // try to distribute fairly
                 out_size = std::min(std::max(local_part.local_size(i+j) - send_counts[i+j], eq_size_split), eq_size);
@@ -228,7 +228,7 @@ std::vector<size_t> split(_Iterator begin, _Iterator end, _Compare comp, const s
         pos = eqr.second;
     }
     // send last elements to last processor
-    std::size_t out_size = std::distance(pos, end);
+    size_t out_size = std::distance(pos, end);
     send_counts[comm.size() - 1] += out_size;
     MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == local_size);
     return send_counts;
@@ -243,8 +243,8 @@ std::vector<size_t> stable_split(_Iterator begin, _Iterator end, _Compare comp, 
     std::vector<size_t> send_counts(comm.size(), 0);
     _Iterator pos = begin;
     size_t local_size = std::distance(begin, end);
-    partition::block_decomposition<std::size_t> local_part(local_size, comm.size(), comm.rank());
-    for (std::size_t i = 0; i < splitters.size();) {
+    blk_dist local_part(local_size, comm.size(), comm.rank());
+    for (size_t i = 0; i < splitters.size();) {
         // get the number of splitters which are equal starting from `i`
         unsigned int split_by = 1;
         while (i+split_by < splitters.size()
@@ -260,7 +260,7 @@ std::vector<size_t> stable_split(_Iterator begin, _Iterator end, _Compare comp, 
         pos = eqr.first;
 
         // split equal elements fairly across processors
-        std::size_t eq_size = std::distance(pos, eqr.second);
+        size_t eq_size = std::distance(pos, eqr.second);
 
         // send equal elements to processor based on my own rank compared to
         // how many equal splitters there are
@@ -278,7 +278,7 @@ std::vector<size_t> stable_split(_Iterator begin, _Iterator end, _Compare comp, 
     }
 
     // send last elements to last processor
-    std::size_t out_size = std::distance(pos, end);
+    size_t out_size = std::distance(pos, end);
     send_counts[comm.size() - 1] += out_size;
     MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == local_size);
     return send_counts;
@@ -311,11 +311,11 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& 
 
 
     // local size
-    std::size_t local_size = std::distance(begin, end);
+    size_t local_size = std::distance(begin, end);
 
     // check if we have a perfect block decomposition
-    std::size_t global_size = mxx::allreduce(local_size, comm);
-    partition::block_decomposition<std::size_t> mypart(global_size, p, comm.rank());
+    size_t global_size = mxx::allreduce(local_size, comm);
+    blk_dist mypart(global_size, comm);
     bool _AssumeBlockDecomp = mxx::all_of(local_size == mypart.local_size(), comm);
 
     // sample sort
@@ -356,7 +356,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& 
 
 
     std::vector<size_t> recv_counts = mxx::all2all(send_counts, comm);
-    std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+    size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
     MXX_ASSERT(!_AssumeBlockDecomp || (local_size <= (size_t)p || recv_n <= 2* local_size));
     std::vector<value_type> recv_elements(recv_n);
     // TODO: use collective with iterators [begin,end) instead of pointers!
@@ -377,7 +377,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& 
         }
         val_it start_merge_it = recv_elements.begin();
 
-        std::size_t merge_n = local_size;
+        size_t merge_n = local_size;
         value_type* merge_buf_begin = &(*begin);
         std::vector<value_type> merge_buf;
         // TODO: reasonable values for the buffer?
@@ -385,7 +385,7 @@ void samplesort(_Iterator begin, _Iterator end, _Compare comp, const mxx::comm& 
         if (local_size == 0 || local_size < recv_n / 10)
         {
             // at least 1MB buffer
-            merge_n = std::max<std::size_t>(recv_n / 10, (1024*1024)/sizeof(value_type));
+            merge_n = std::max<size_t>(recv_n / 10, (1024*1024)/sizeof(value_type));
             merge_buf.resize(merge_n);
             merge_buf_begin = &merge_buf[0];
         }
