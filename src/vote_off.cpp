@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 
     bool benchmark_char_align = false;
 
-    std::vector<double> bw_row = mxx::pairwise_bw_matrix(hc);
+    std::vector<double> bw_row = mxx::pairwise_bw_matrix(hc, 32*1024*1024);
     mxx::print_bw_matrix_stats(hc, bw_row);
     bool part = mxx::vote_off(hc, n_vote_off, bw_row);
     if (hc.global.rank() == 0)

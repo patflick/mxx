@@ -100,6 +100,14 @@ inline sync_ostream sync_cerr(const mxx::comm& comm, int root = 0) {
     return comm.rank() == root ? sync_ostream(comm, root, std::cerr) : sync_ostream(comm, root);
 }
 
+template <typename base_stream>
+inline sync_ostream sync_os(const mxx::comm& comm, base_stream& bs, int root = 0) {
+    return comm.rank() == root ? sync_ostream(comm, root, bs) : sync_ostream(comm, root);
+};
+
+// TODO: a sync ofstream
+// TODO: a sync cout/cerr which writes [rank] before every line/msg
+
 } // namespace mxx
 
 

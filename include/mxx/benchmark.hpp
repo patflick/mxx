@@ -79,6 +79,21 @@ public:
         return result;
     }
 
+    // split the local communicators in the same way on all processes
+    // This splits the `local` and `global` communicator and leaves the
+    // `local_master` as is, assuming that `color` is identical for all
+    // processes in a `local_master`.
+    hybrid_comm split_local(int color) const {
+        // split the processes but assert that each node is only in
+        // one process
+        MXX_ASSERT(mxx::all_same(color, local_master));
+        hybrid_comm result;
+        result.local = local.split(color);
+        result.local_master = local_master.copy();
+        result.global = global.split(color);
+        return result;
+    }
+
     // move constructor moves all members
     hybrid_comm(hybrid_comm&& o) = default;
 
@@ -93,6 +108,26 @@ public:
             }
         } else {
             hybrid_comm hc(split_by_node(participate));
+            if (participate) {
+                func(hc);
+            }
+        }
+        global.barrier();
+    }
+
+    // executes only with `ppn` processes per node
+    template <typename Func>
+    void with_ppn(int ppn, Func func) const {
+        MXX_ASSERT(mxx::all_same(ppn, global));
+        MXX_ASSERT(mxx::all_of(ppn <= local.size()));
+
+        int participate = local.rank() < ppn;
+        if (mxx::all_same(participate, global)) {
+            if (participate) {
+                func(*this);
+            }
+        } else {
+            hybrid_comm hc(split_local(participate));
             if (participate) {
                 func(hc);
             }
@@ -152,25 +187,27 @@ std::pair<double,double> bw_simplex(const mxx::comm& c, int partner, size_t n) {
     return std::pair<double,double>(bw1, bw2);
 }
 
+/**
+ * Collectively times a duplex sendrecv with a given partner rank.
+ */
 template <typename T>
 double time_duplex(const mxx::comm& c, int partner, const std::vector<T>& sendvec, std::vector<T>& recvvec) {
     MXX_ASSERT(sendvec.size() == recvvec.size());
-
     size_t n = sendvec.size();
+    mxx::datatype dt = mxx::get_datatype<size_t>();
     c.barrier();
     auto start = std::chrono::steady_clock::now();
-    mxx::datatype dt = mxx::get_datatype<size_t>();
     // sendrecv for full duplex
     MPI_Sendrecv(const_cast<T*>(&sendvec[0]), n, dt.type(), partner, 0, &recvvec[0], n, dt.type(), partner, 0, c, MPI_STATUS_IGNORE);
-    //c.barrier();
     auto end = std::chrono::steady_clock::now();
     double time_p2p = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-
-    // calculate duplex bandwidth
-    //double bw = 2*8*(double)n*sizeof(size_t)/time_p2p/1000.0;
     return time_p2p;
 }
 
+/**
+ * Times duplex sendrecv with a partner process and compute the
+ * duplex bandwidth per node.
+ */
 template <typename T>
 double bw_duplex_per_node(const mxx::comm& c, int partner, const mxx::comm& smc, const std::vector<T>& sendvec, std::vector<T>& recvvec) {
     size_t n = sendvec.size();
@@ -181,80 +218,131 @@ double bw_duplex_per_node(const mxx::comm& c, int partner, const mxx::comm& smc,
 }
 
 
-void bm(const mxx::comm& c, int partner, const mxx::comm& smc) {
 
-    size_t n = 10000000;
-    n /= smc.size();
-    size_t MB = (n*sizeof(size_t))/1024/1024;
-    std::vector<size_t> vec(n);
-    std::vector<size_t> result(n);
-    std::generate(vec.begin(), vec.end(), std::rand);
 
-    std::string node_name = get_processor_name();
 
-    double timed = time_duplex(c, partner, vec, result);
-    double bw_send, bw_recv;
-    std::tie(bw_send, bw_recv) = bw_simplex(c, partner, n);
+/**
+ * @brief Executes the given function f(i) for each pair of processes where
+ *        there are `size` processes and this process has rank `rank`.
+ *        Processes are paired such that in every iteration
+ *        f(i) is called on rank `rank` iff simultanously f(rank) is called on
+ *        rank `i`.
+ *
+ *        The function f(i) is called once for all ranks 0,...,size-1,
+ *        excluding i = rank.
+ *
+ *        If in any iteration, no partner is found, f(-1) is called. This happens
+ *        if for example the number of processes `size` is an odd number.
+ *
+ * @param rank  The rank of this process
+ * @param size  The number of total processes
+ * @param f     The function to be called for each paired rank.
+ */
+template <typename F>
+void pairwise_func(int rank, int size, F f) {
+    // pair up blocks of size 2^i in iteration i
+    // for each pair of blocks, pair up all combinations via a linear offset
+    for (int dist = 1; dist < size; dist <<= 1) {
+        int partner_block;
+        if ((rank / dist) % 2 == 0) {
+            // to left block
+            partner_block = (rank/dist + 1)*dist;
+        } else {
+            partner_block = (rank/dist - 1)*dist;
+        }
+        int inblock_idx = rank % dist;
+        for (int i = 0; i < dist; ++i) {
+            int partner;
+            if (partner_block >= rank)
+                partner = partner_block + (inblock_idx + i) % dist;
+            else
+                partner = partner_block + (inblock_idx + (dist - i)) % dist;
+            if (partner < size) {
+                f(partner);
+            } else {
+                // this rank doesn't have a partner in this iteration
+                f(-1);
+            }
+        }
+    }
+}
 
-    // calculate BW
-    double maxtime_duplex = mxx::allreduce(timed, mxx::max<double>(), smc);
-    double sum_bwd = 2*8*n*sizeof(size_t)*smc.size()/maxtime_duplex/1000.0;
-    double sum_bw_send = mxx::allreduce(bw_send, std::plus<double>(), smc);
-    double sum_bw_recv = mxx::allreduce(bw_recv, std::plus<double>(), smc);
-    c.with_subset(smc.rank() == 0, [&](const mxx::comm& subcomm) {
-        mxx::sync_cout(subcomm) << "[" << node_name << "]: Node BW Duplex = "
-        << sum_bwd << " Gb/s (Simplex " << sum_bw_send << " Gb/s send, " << sum_bw_recv
-        << " Gb/s recv) [" << MB*smc.size() << " MiB]" << std::endl;
+
+/**
+ * @brief Calls f(c, partner) for each pair of processes and f(-1) if there is
+ *        no partner in any given round. (see `pairwise_func(int,int,F)`)
+ */
+template <typename F>
+void pairwise_func(const mxx::comm& c, F f) {
+    pairwise_func(c.rank(), c.size(), [&](int partner){ f(c, partner);});
+}
+
+// called once for each pair of nodes
+// if there are multiple processes per node, the processes are matched
+// up by their local ranks
+// The given function is called using global ranks as the partner index
+// If in any iteration there is no partner node, this calls f(-1)
+template <typename F>
+void pairwise_nodes_func(const hybrid_comm& hc, F f) {
+    MXX_ASSERT(mxx::all_same(hc.local.size()));
+    pairwise_func(hc.node_rank(), hc.num_nodes(), [&](int partner_node) {
+        if (partner_node >= 0) {
+            int partner_rank = partner_node * hc.local.size() + hc.local.rank();
+            f(partner_rank);
+        } else {
+            f(-1);
+        }
     });
 }
 
 // returns a row of pairwise bw benchmark results on each process where smc.rank() == 0
-std::vector<double> pairwise_bw_matrix(const hybrid_comm& hc) {
-    int num_nodes = hc.num_nodes();
-    size_t n = 1000000;
+std::vector<double> pairwise_bw_matrix(const hybrid_comm& hc, size_t msg_size) {
+    size_t n = msg_size / 8;
     std::vector<size_t> vec(n);
     std::vector<size_t> result(n);
     std::generate(vec.begin(), vec.end(), std::rand);
-    n /= hc.local.size();
+
     // nodes get partnered
-    int node_idx = hc.node_rank();
     std::vector<double> bw_row;
     if (hc.is_local_master())
-        bw_row.resize(num_nodes);
-    for (int dist = 1; dist < num_nodes; dist <<= 1) {
-        if (hc.global.rank() == 0) {
-            std::cout << "Benchmarking p2p duplex for dist = " << dist << std::endl;
-        }
-        int partner_block;
-        if ((node_idx / dist) % 2 == 0) {
-            // to left block
-            partner_block = (node_idx/dist + 1)*dist;
-        } else {
-            partner_block = (node_idx/dist - 1)*dist;
-        }
-        int inblock_idx = node_idx % dist;
-        for (int i = 0; i < dist; ++i) {
-            int partner_node;
-            if (partner_block >= node_idx)
-                partner_node = partner_block + (inblock_idx + i) % dist;
-            else
-                partner_node = partner_block + (inblock_idx + (dist - i)) % dist;
-            int partner = partner_node*hc.local.size() + hc.local.rank();
-            // benchmark duplex with partner
-            if (partner_node < num_nodes) {
-                double bw = bw_duplex_per_node(hc.global, partner, hc.local, vec, result);
-                if (hc.is_local_master()) {
-                    bw_row[partner_node] = bw;
-                }
-            } else {
-                // if this node doesn't participate in the benchmarking, it
-                // still needs to call the barrier that is otherwise called
-                // inside the time_duplex function
-                hc.global.barrier();
+        bw_row.resize(hc.num_nodes());
+
+    pairwise_nodes_func(hc, [&](int partner){
+        if (partner >= 0) {
+            double bw = bw_duplex_per_node(hc.global, partner, hc.local, vec, result);
+            if (hc.is_local_master()) {
+                int partner_node = partner / hc.local.size();
+                bw_row[partner_node] = bw;
             }
+        } else {
+            // if this node doesn't participate in the benchmarking, it
+            // still needs to call the barrier that is otherwise called
+            // inside the time_duplex function
+            hc.global.barrier();
         }
-    }
+    });
+
     return bw_row;
+}
+
+
+void save_matrix_pernode(const hybrid_comm& hc, const std::string& filename, const std::vector<double>& values) {
+    std::ofstream of;
+    if (hc.global.rank() == 0) {
+        of.open(filename);
+    }
+    hc.with_local_master([&](){
+        std::stringstream ss;
+        ss << hc.node_name << ",";
+        ss << std::fixed << std::setprecision(2);
+        for (size_t i = 0; i < values.size(); ++i) {
+            ss << values[i];
+            if (i+1 < values.size())
+                ss << ",";
+        }
+        // create sync stream
+        mxx::sync_os(hc.local_master, of) << ss.str() << std::endl;
+    });
 }
 
 void print_bw_matrix_stats(const hybrid_comm& hc, const std::vector<double>& bw_row) {
@@ -402,10 +490,199 @@ void write_new_nodefile(const hybrid_comm& hc, bool participate, const std::stri
 }
 
 
+// benchmark all2all function that outputs to csv file:
+// n (in bytes), p, nnodes, m, ppn, min_time, avg_time, max_time
+
+// m: message size, total data send from one process: m*comm.size()
+// n = m*p^2
+// returns the time taken by this process for the all2all in microseconds
+template <typename T>
+double timed_all2all_impl(const mxx::comm& c, size_t m) {
+    // create arrays and generate random data
+    std::vector<T> els(m*c.size());
+    //std::generate(els.begin(), els.end(), [](){ return std::rand() % 255; });
+    std::vector<T> rcv(m*c.size());
+    mxx::datatype dt = mxx::get_datatype<T>();
+
+    /* run the actual MPI_Alltoall and time it */
+    c.barrier();
+    auto start = std::chrono::steady_clock::now();
+    //MPI_Alltoall(&els[0], m, dt.type(), &rcv[0], m, dt.type(), c);
+    mxx::all2all(&els[0], m, &rcv[0], c);
+    auto end = std::chrono::steady_clock::now();
+
+    /* return the time taken on this process in microseconds */
+    double time_all2all = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    return time_all2all;
+}
+
+double timed_all2all(const mxx::comm& c, size_t m) {
+    if (m >= 8 && m % 8 == 0) {
+        return timed_all2all_impl<uint64_t>(c, m/8);
+    } else if (m >= 4 && m % 4 == 0) {
+        return timed_all2all_impl<uint32_t>(c, m/4);
+    } else {
+        return timed_all2all_impl<unsigned char>(c, m);
+    }
+}
+
+void bm_all2all(const mxx::hybrid_comm& hc, std::ostream& os, size_t max_size_per_node) {
+    const mxx::comm& c = hc.global;
+    assert(sizeof(size_t) == 8);
+    if (hc.global.rank() == 0) {
+        std::cerr << "bm_all2all with np = " << hc.global.size() << ", ppn = " << hc.local.size() << ", nnodes = " << hc.num_nodes() << std::endl;
+    }
+    for (size_t m = 1; (m*c.size()*hc.local.size()) <= max_size_per_node; m <<= 1) {
+        if (m >= std::numeric_limits<int>::max())
+            break;
+        size_t np = m*c.size(); // data per process
+        size_t n = np*c.size(); // total number of bytes globally
+
+        if (hc.global.rank() == 0) {
+            std::cerr << "bm_all2all         m = " << m << ", n/p = " << np << ", n = " << n << ", n/node = " << (m*c.size()*hc.local.size()) << std::endl;
+        }
+
+        double time_all2all = timed_all2all(c, m);
+
+        /* get min, max and average */
+        double max_time = mxx::allreduce(time_all2all, mxx::max<double>(), c);
+        double min_time = mxx::allreduce(time_all2all, mxx::min<double>(), c);
+        double avg_time = mxx::allreduce(time_all2all, c) / c.size();
+
+        // p, q, ppn, m, n, time_min, time_avg, time_max
+        if (c.rank() == 0) {
+            os << c.size() << "," << hc.num_nodes() << "," << hc.local.size() << "," << m << "," << n << "," << min_time << "," << avg_time << "," << max_time << std::endl;
+        }
+    }
+}
+
+#if 0
+template <typename F>
+void bm_coll_function(const mxx::hybrid_comm& hc, std::ostream& os, F f, size_t max_size_per_node) {
+    const mxx::comm& c = hc.global;
+    for (size_t m = 1; (m*c.size()*hc.local.size()) <= max_size_per_node; m <<= 1) {
+        size_t np = m*c.size(); // max data per process
+        size_t n = np*c.size(); // max total number of bytes globally (all2all and allgather)
+
+        // execute the timed function
+        double val = f(c, m);
+
+        /* get min, max and average */
+        double max_val = mxx::allreduce(val, mxx::max<double>(), comm);
+        double min_val = mxx::allreduce(val, mxx::min<double>(), comm);
+        double avg_val = mxx::allreduce(val, comm) / comm.size();
+
+        // p, q, ppn, m, n, time_min, time_avg, time_max
+        if (c.rank() == 0) {
+            os << c.size() << "," << hc.num_nodes() << "," << hc.local.size() << "," << m << "," << n << "," << min_time << "," << avg_time << "," << max_time << std::endl;
+        }
+    }
+}
+#endif
+
+// next smaller power of 2
+uint32_t flp2 (uint32_t x)
+{
+    x = x | (x >> 1);
+    x = x | (x >> 2);
+    x = x | (x >> 4);
+    x = x | (x >> 8);
+    x = x | (x >> 16);
+    return x - (x >> 1);
+}
+
+
+/**
+ * @brief Executes the given function `f(hybrid_comm hc_ppn)` for all powers of
+ *        2 between the total ppn downto 1.
+ *
+ * @param hc    Hybrid communicator which is split for all `ppn` values.
+ * @param f     The function called for each `ppn` value.
+ */
+template <typename F>
+void forall_p2_ppn(const mxx::hybrid_comm& hc, F f) {
+    int ppn = hc.local.size();
+    MXX_ASSERT(mxx::all_same(ppn, hc.global));
+    for (int q = ppn; q >= 1; q = flp2(q-1)) {
+        // split by ppn
+        hc.with_ppn(q, std::forward<F>(f));
+    }
+}
+
+template <typename F>
+void forall_p2_nnodes_and_ppn(const mxx::hybrid_comm& hc, F f) {
+    int ppn = hc.local.size();
+    MXX_ASSERT(mxx::all_same(ppn, hc.global));
+
+    // in decreasing powers of two
+    for (int nn = hc.num_nodes(); nn >= 2; nn = flp2(nn-1)) {
+        // split by nodes
+        hc.with_nodes(hc.node_rank() < nn, [&](const mxx::hybrid_comm& hcn) {
+            for (int q = ppn; q >= 1; q = flp2(q-1)) {
+                // split by ppn
+                hcn.with_ppn(q, std::forward<F>(f));
+            }
+        });
+    }
+}
+
+void bm_all2all_forall_q(const mxx::hybrid_comm& hc, std::ostream& os, size_t max_size_per_node) {
+    int ppn = hc.local.size();
+    MXX_ASSERT(mxx::all_same(ppn, hc.global));
+
+    for (int q = ppn; q >= 1; q = flp2(q)) {
+        hc.with_ppn(q, [&](const mxx::hybrid_comm& hcq) {
+            bm_all2all(hcq, os, max_size_per_node);
+        });
+    }
+}
+
+// TODO: this isn't working yet
+double ping(const mxx::comm& c, int partner, int rounds = 100) {
+    // pairwise ping measurement with this process and process of rank `partner`
+
+    int msg = 0;
+    std::chrono::steady_clock::time_point rcv_tp, send_tp;
+    MPI_Status st;
+
+    if (c.rank() < partner) {
+        // i initiate first ping
+        send_tp = std::chrono::steady_clock::now();
+        MPI_Send(&msg, 1, MPI_INT, partner, 0, c);
+    } else {
+        //MPI_Recv(&msg, 1, MPI_INT, partner, MPI_ANY_TAG, c, &st);
+    }
+
+    int ping_cnt = 0;
+    double ping_sum = 0.;
+    for (int i = 0; i <= rounds; ++i) {
+            MPI_Recv(&msg, 1, MPI_INT, partner, MPI_ANY_TAG, c, &st);
+            rcv_tp = std::chrono::steady_clock::now();
+            int t = st.MPI_TAG;
+            if (t > 0) {
+                    // save time diff
+                    double time_diff = std::chrono::duration_cast<std::chrono::microseconds>(rcv_tp - send_tp).count();
+                    ping_cnt += 1;
+                    ping_sum += time_diff;
+            }
+            if (t < 2*rounds) {
+                    send_tp = std::chrono::steady_clock::now();
+                    MPI_Send(&msg, 1, MPI_INT, partner, t+1, c);
+            }
+            if (t+1 == 2*rounds)
+                    break;
+    }
+    assert(ping_cnt == rounds);
+    return ping_sum / ping_cnt;
+}
+
+
+
 void bw_all2all(const mxx::comm& c, const mxx::comm& smc) {
     // message size per target processor
     for (int k = 1; k <= 16; k <<= 1) {
-        int m = k*1024;
+        size_t n = k*1024*1024;
+        int m = n/c.size();
         std::vector<size_t> els(m*c.size());
         std::generate(els.begin(), els.end(), std::rand);
         std::vector<size_t> rcv(m*c.size());
@@ -418,11 +695,11 @@ void bw_all2all(const mxx::comm& c, const mxx::comm& smc) {
         double time_all2all = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         double max_time = mxx::allreduce(time_all2all, mxx::max<double>(), c);
         double min_time = mxx::allreduce(time_all2all, mxx::min<double>(), c);
-        size_t bits_sendrecv = 2*8*sizeof(size_t)*m*(c.size() - smc.size());
+        size_t bits_sendrecv = 2*8*sizeof(size_t)*smc.size()*m*(c.size() - smc.size());
         // bandwidth in Gb/s
         double bw = bits_sendrecv / max_time / 1000.0;
         if (c.rank() == 0) {
-            std::cout << "All2all bandwidth: " << bw << " Gb/s [min=" << min_time/1000.0 << " ms, max=" << max_time/1000.0 << " ms, local_size=" << bits_sendrecv/1024/1024 << " MiB]" << std::endl;
+            std::cout << "All2all bandwidth (per node) " << bw << " Gb/s [min=" << min_time/1000.0 << " ms, max=" << max_time/1000.0 << " ms, local_size=" << bits_sendrecv/1024/1024 << " MiB]" << std::endl;
         }
     }
 }
@@ -516,80 +793,6 @@ void bw_all2all_unaligned_char(const mxx::comm& c, const mxx::comm& smc, bool re
     }
 }
 
-void benchmark_nodes_bw_p2p(const mxx::comm& comm = mxx::comm()) {
-    // pair with another node
-    hybrid_comm hc(comm);
-    int proc_per_node = hc.local.size();
-
-    // assert same number processors per node
-    if (!mxx::all_same(proc_per_node, comm)) {
-        std::cerr << "Error: this benchmark assumes the same number of processors per node" << std::endl;
-        MPI_Abort(comm, -1);
-    }
-
-    int num_nodes = hc.num_nodes();
-
-    if (num_nodes % 2 != 0) {
-        std::cerr << "Error: this benchmark assumes an even number of nodes" << std::endl;
-        MPI_Abort(comm, -1);
-    }
-
-    //for (int local_p = 1; local_p <= proc_per_node; local_p <<= 1) {
-    /*
-    int local_p = sm_comm.size();
-        bool participate =  true; //sm_comm.rank() < local_p;
-        mxx::comm c = comm.split(participate, node_idx*local_p + sm_comm.rank());
-        */
-     //   mxx::comm smc = sm_comm.split(participate);
-
-        if (true) {
-            std::vector<double> bw_row = pairwise_bw_matrix(hc);
-            print_bw_matrix_stats(hc, bw_row);
-            bool part = vote_off(hc, 4, bw_row); // TODO: process result
-            if (hc.global.rank() == 0)
-                std::cout << "Before vote off: " << std::endl;
-            bw_all2all(hc.global, hc.local);
-            if (hc.global.rank() == 0)
-                std::cout << "After vote off: " << std::endl;
-            hc.with_nodes(part, [&](const hybrid_comm& subhc) {
-                bw_all2all(subhc.global, subhc.local);
-                bw_all2all_char(subhc.global, subhc.local);
-                bw_all2all_unaligned_char(subhc.global, subhc.local, false);
-                if (subhc.global.rank() == 0)
-                    std::cout << "== With re-alignment" << std::endl;
-                bw_all2all_unaligned_char(subhc.global, subhc.local, true);
-            });
-            write_new_nodefile(hc, part, "blah.nodes");
-
-            /*
-            if (c.rank() == 0) {
-                std::cout << "Running with " << local_p << "/" << proc_per_node << " processes per node" << std::endl;
-            }
-            MXX_ASSERT(c.size() % 2 == 0);
-            if (local_p > 1) {
-                // intranode BW test
-                if (c.rank() == 0)
-                    std::cout << "Intranode BW test" << std::endl;
-                int partner = (c.rank() % 2 == 0) ? c.rank() + 1 : c.rank() - 1;
-                bm(c, partner, smc);
-            }
-            // 1) closest neighbor
-            if (c.rank() == 0)
-                std::cout << "Closest Neighbor BW test" << std::endl;
-            int partner = (node_idx % 2 == 0) ? c.rank() + local_p : c.rank() - local_p;
-            bm(c, partner, smc);
-
-            // 2) furthest neighbor
-            if (c.rank() == 0)
-                std::cout << "Furthest Neighbor BW test" << std::endl;
-            partner = (c.rank() < c.size()/2) ? c.rank() + c.size()/2 : c.rank() - c.size()/2;
-            bm(c, partner, smc);
-            */
-        }
-    //}
-    // wait for other processes to finish the benchmarking
-    //comm.barrier();
-}
 
 } // namespace mxx
 
