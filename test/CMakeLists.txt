@@ -26,9 +26,6 @@ target_link_libraries(mxx-test-sort mxx-gtest-main)
 add_executable(mxx-test-distribution test_distribution.cpp)
 target_link_libraries(mxx-test-distribution mxx-gtest-main)
 
-add_executable(mxx-benchmarks benchmarks.cpp)
-target_link_libraries(mxx-benchmarks mxx-gtest-main)
-
 # Combination of all parallel tests:
 add_executable(mxx-test-all test_collective.cpp test_reductions.cpp test_send.cpp test_sort.cpp test_distribution.cpp)
 target_link_libraries(mxx-test-all mxx-gtest-main)

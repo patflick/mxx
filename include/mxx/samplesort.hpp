@@ -47,8 +47,11 @@
 #endif
 
 
-#define SS_ENABLE_TIMER 0
-#if SS_ENABLE_TIMER
+#ifndef MXX_SAMPLESORT_TIMER
+#define MXX_SAMPLESORT_TIMER 0
+#endif
+
+#if MXX_SAMPLESORT_TIMER
 #include "timer.hpp"
 #define SS_TIMER_START(comm) mxx::section_timer timer(std::cerr, comm, 0);
 #define SS_TIMER_END_SECTION(str) timer.end_section(str);
