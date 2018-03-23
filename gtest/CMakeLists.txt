@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.6)
 
 # project settings
 project(mxx-gtest)
@@ -8,7 +8,6 @@ project(mxx-gtest)
 #  MPI Google Test:  #
 ######################
 
-include_directories("${PROJECT_SOURCE_DIR}/../")
-
 add_library(mxx-gtest-main mxx_gtest_main.cpp gtest-all.cc)
-target_link_libraries(mxx-gtest-main ${MPI_LIBRARIES} pthread)
+target_link_libraries(mxx-gtest-main PUBLIC mxx ${MPI_LIBRARIES} pthread)
+target_include_directories(mxx-gtest-main PUBLIC "../")
