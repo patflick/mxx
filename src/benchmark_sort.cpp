@@ -7,7 +7,7 @@
 #include <mxx/benchmark.hpp>
 #include <mxx/utils.hpp>
 
-#include <ext/cxx-prettyprint/prettyprint.hpp>
+#include <cxx-prettyprint/prettyprint.hpp>
 
 std::string exec_name;
 
