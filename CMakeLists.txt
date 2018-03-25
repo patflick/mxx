@@ -1,14 +1,7 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.6)
 
 # project settings
-project(mxx)
-
-##### General Compilation Settings
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wuninitialized --std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -funroll-loops")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELEASE} -g")
+project(mxx LANGUAGES CXX)
 
 # Add these standard paths to the search paths for FIND_LIBRARY
 # to find libraries from these locations first
@@ -25,6 +18,10 @@ if(COMMAND cmake_policy)
     cmake_policy(SET CMP0003 NEW)
 endif()
 
+add_library(mxx INTERFACE)
+target_compile_features(mxx INTERFACE cxx_std_11)
+target_include_directories(mxx INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+
 
 #### MPI
 find_package(MPI REQUIRED)
@@ -32,10 +29,56 @@ if (MPI_FOUND)
     #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_COMPILE_FLAGS}")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_COMPILE_FLAGS}")
     #set(CMAKE_LINK_FLAGS "${CMAKE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
-    include_directories(SYSTEM ${MPI_INCLUDE_PATH})
+    target_link_libraries(mxx INTERFACE ${MPI_CXX_LIBRARIES})
+    target_include_directories(mxx INTERFACE ${MPI_CXX_INCLUDE_PATH})
 else (MPI_FOUND)
     message(SEND_ERROR "This application cannot compile without MPI")
 endif (MPI_FOUND)
+
+#### cxx-prettyprint
+target_include_directories(mxx INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext> $<INSTALL_INTERFACE:include/mxx/ext>)
+
+#### Installation
+install(DIRECTORY include/mxx/ DESTINATION include/mxx)
+install(DIRECTORY ext/ DESTINATION include/mxx FILES_MATCHING PATTERN "*.hpp")
+
+include(CMakePackageConfigHelpers)
+
+install(TARGETS mxx
+        EXPORT mxxTargets
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include
+        )
+
+export(EXPORT mxxTargets
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/mxx/mxxTargets.cmake"
+  NAMESPACE mxx::
+)
+set(ConfigPackageLocation lib/cmake/mxx)
+configure_package_config_file(cmake/mxxConfig.cmake
+  "${CMAKE_CURRENT_BINARY_DIR}/mxx/mxxConfig.cmake"
+  INSTALL_DESTINATION "${ConfigPackageLocation}"
+)
+
+install(EXPORT mxxTargets
+  FILE
+    mxxTargets.cmake
+  NAMESPACE
+    mxx::
+  DESTINATION
+    ${ConfigPackageLocation}
+)
+install(
+  FILES
+    cmake/mxxConfig.cmake
+  DESTINATION
+    ${ConfigPackageLocation}
+  COMPONENT
+    Devel
+)
+
 
 #### Doxygen
 find_package(Doxygen)
@@ -81,10 +124,6 @@ endif(FAKE_BIG_MPI)
 ###### Executable and Libraries
 # Save libs and executables in the same place
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
-
-include_directories("${PROJECT_SOURCE_DIR}/include")
-include_directories("${PROJECT_SOURCE_DIR}/ext")
-include_directories("${PROJECT_SOURCE_DIR}")
 
 # build tests
 add_subdirectory(gtest)
