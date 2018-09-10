@@ -113,6 +113,19 @@ std::string file_block_decompose(const char* filename, MPI_Comm comm = MPI_COMM_
     return local_str;
 }
 
+template <typename T>
+void write_ordered(const std::string& filename, const T* buf, size_t count, const mxx::comm& comm) {
+    MPI_File handle;
+    MPI_File_open(comm, &filename[0], MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &handle);
+    mxx::datatype dt = mxx::get_datatype<T>();
+    MPI_File_write_ordered(handle, const_cast<T*>(buf), count, dt.type(), MPI_STATUS_IGNORE);
+    MPI_File_close(&handle);
+}
+template <typename T>
+void write_ordered(const std::string& filename, const std::vector<T>& data, const mxx::comm& comm) {
+    write_ordered(filename, data.data(), data.size(), comm);
+}
+
 template <typename _Iterator>
 void write_files(const std::string& filename, _Iterator begin, _Iterator end, MPI_Comm comm = MPI_COMM_WORLD)
 {
@@ -141,6 +154,7 @@ void write_files(const std::string& filename, _Iterator begin, _Iterator end, MP
     }
     outfs.close();
 }
+
 
 } // namespace mxx
 
