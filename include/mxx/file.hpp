@@ -116,7 +116,7 @@ std::string file_block_decompose(const char* filename, MPI_Comm comm = MPI_COMM_
 template <typename T>
 void write_ordered(const std::string& filename, const T* buf, size_t count, const mxx::comm& comm) {
     MPI_File handle;
-    MPI_File_open(comm, &filename[0], MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &handle);
+    MPI_File_open(comm, const_cast<char*>(&filename[0]), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &handle);
     mxx::datatype dt = mxx::get_datatype<T>();
     MPI_File_write_ordered(handle, const_cast<T*>(buf), count, dt.type(), MPI_STATUS_IGNORE);
     MPI_File_close(&handle);
