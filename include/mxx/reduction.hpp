@@ -205,9 +205,10 @@ public:
         }
         if (!m_builtin) {
             // create user function
-            using namespace std::placeholders;
+            using ph = std::placeholders;
             m_user_func = std::bind(custom_op::custom_function<Func>,
-                                  std::forward<Func>(func), _1, _2, _3, _4);
+                                   std::forward<Func>(func),
+                                   ph::_1, ph::_2, ph::_3, ph::_4);
             // get datatype associated with the type `T`
             mxx::datatype dt = mxx::get_datatype<T>();
             // attach function to a copy of the datatype
