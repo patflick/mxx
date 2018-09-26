@@ -205,7 +205,7 @@ public:
         }
         if (!m_builtin) {
             // create user function
-            using ph = std::placeholders;
+            namespace ph = std::placeholders;
             m_user_func = std::bind(custom_op::custom_function<Func>,
                                    std::forward<Func>(func),
                                    ph::_1, ph::_2, ph::_3, ph::_4);
