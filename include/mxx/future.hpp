@@ -33,6 +33,9 @@
 namespace mxx
 {
 
+class request;
+class requests;
+
 template <typename T>
 class future;
 
@@ -40,17 +43,63 @@ template <typename T>
 class future_builder;
 
 
+// request class (should fulfill similar funciton as future<void>)
+class request {
+    MPI_Request req;
+
+    friend requests;
+public:
+    request() : req(MPI_REQUEST_NULL) {}
+
+    // use only for within MPI calls that return MPI_Request objects
+    MPI_Request* get_ptr() {
+        return &req;
+    }
+
+    // TODO: do one that returns the status
+    bool test() {
+        int flag;
+        MPI_Test(&req, &flag, MPI_STATUS_IGNORE);
+        return !(flag == 0);
+    }
+
+    void wait() {
+        MPI_Wait(&req, MPI_STATUS_IGNORE);
+    }
+
+    virtual ~request() {
+        wait();
+    }
+};
+
+// TODO; rethink request, requests, future, also how to implement .then()?
+// - .then() as possible extension
+// - use future simply as request/requests? + wrapped return value for now...
+
 class requests {
 public:
     requests() : m_requests() {}
-    requests(MPI_Request req) : m_requests(1, req) {}
-    requests(const requests& req) = default;
+    //requests(MPI_Request req) : m_requests(1, req) {}
+    //requests(const requests& req) = default;
     requests(requests&& req) = default;
-    requests& operator=(const requests& req) = default;
+    //requests& operator=(const requests& req) = default;
     requests& operator=(requests&& req) = default;
+
+    // move a mxx::request into this vector
+    void add(request&& r) {
+        m_requests.emplace_back(r.req);
+        r.req = MPI_REQUEST_NULL;
+    }
 
     void append(MPI_Request req) {
         m_requests.push_back(req);
+    }
+
+    // adds all requests from `r` into this requests object
+    void insert(requests& r) {
+        // `steal` the requests
+        m_requests.insert(m_requests.end(), r.m_requests.begin(), r.m_requests.end());
+        r.m_requests.clear();
     }
 
     MPI_Request& add() {
@@ -78,15 +127,9 @@ public:
         MPI_Waitall(m_requests.size(), &m_requests[0], MPI_STATUSES_IGNORE);
     }
 
+    // TODO: test_/wait_ + any & some
     void wait() {
         this->waitall();
-    }
-
-    // adds all requests from `r` into this requests object
-    void insert(requests& r) {
-        // `steal` the requests
-        m_requests.insert(m_requests.end(), r.m_requests.begin(), r.m_requests.end());
-        r.m_requests.clear();
     }
 
     bool test() {
@@ -201,7 +244,7 @@ protected:
 
 protected:
     typedef std::unique_ptr<value_type> ptr_type;
-    ptr_type m_data;
+    ptr_type m_data; // return value
 };
 
 
@@ -243,7 +286,7 @@ protected:
 
 // similar to a std::promise, this is a friend of mxx::future and
 // enables mxx functions to build a mxx::future containing the
-// yet to be written to buffers
+// yet to be written buffer
 template <typename T>
 class future_builder {
 public:
@@ -253,6 +296,10 @@ public:
 
     MPI_Request& add_request() {
         return m_future.add_request();
+    }
+
+    void add(mxx::request&& r) {
+        m_future.m_requests.add(std::move(r));
     }
 
     value_type* data() {

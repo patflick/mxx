@@ -27,7 +27,7 @@
 #include <vector>
 
 #include "datatypes.hpp"
-#include "shift.hpp" // FIXME: include only `requests`
+#include "future.hpp" // TODO: include requests
 
 namespace mxx {
 namespace impl {

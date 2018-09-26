@@ -1,10 +1,13 @@
 
 #include <iostream>
+#include <chrono>
 
 #include <mxx/env.hpp>
 #include <mxx/datatypes.hpp>
+
 #include "new_datatype.hpp"
 #include "type_traits.hpp"
+#include "buffer.hpp"
 
 #include <cxx-prettyprint/prettyprint.hpp>
 
@@ -23,16 +26,39 @@ struct Y {
     int i;
 };
 
+struct XY {
+    int* x;
+};
+
+
+std::string demangle(const char* name) {
+    int status = -4; // some arbitrary value to eliminate the compiler warning
+
+    // enable c++11 by passing the flag -std=c++11 to g++
+    std::unique_ptr<char, void(*)(void*)> res {
+        abi::__cxa_demangle(name, NULL, NULL, &status),
+        std::free
+    };
+
+    return (status==0) ? res.get() : name ;
+}
+
+
+template <typename T>
+std::string type_name() {
+    return demangle(typeid(T).name());
+}
 
 template <typename T>
 typename std::enable_if<mxx::is_simple_type<T>::value, void>::type test_datatype() {
     mxx::datatype dt = mxx::make_datatype<T>();
     std::cout << "================================================" << std::endl;
-    std::cout << "Testing type: " << typeid(T).name() << std::endl;
-    std::cout << "Sizeof(): " << sizeof(T) << std::endl;
-    std::cout << "Extent: " << dt.get_extent() << std::endl;
-    std::cout << "True extent: " << dt.get_true_extent() << std::endl;
-    std::cout << "is simple: " << mxx::is_simple_type<T>::value << std::endl;
+    std::cout << "Testing type: " << type_name<T>() << std::endl;
+    std::cout << "Typeid:       " << typeid(T).name() << std::endl;
+    std::cout << "Sizeof():     " << sizeof(T) << std::endl;
+    std::cout << "Extent:       " << dt.get_extent() << std::endl;
+    std::cout << "True extent:  " << dt.get_true_extent() << std::endl;
+    std::cout << "is simple:    " << mxx::is_simple_type<T>::value << std::endl;
 
     // unpack test
     mxx::flat_repr r;
@@ -67,23 +93,7 @@ typename std::enable_if<!mxx::is_simple_type<T>::value, void>::type test_datatyp
 }
 
 
-std::string demangle(const char* name) {
 
-    int status = -4; // some arbitrary value to eliminate the compiler warning
-
-    // enable c++11 by passing the flag -std=c++11 to g++
-    std::unique_ptr<char, void(*)(void*)> res {
-        abi::__cxa_demangle(name, NULL, NULL, &status),
-        std::free
-    };
-
-    return (status==0) ? res.get() : name ;
-}
-
-template <typename T>
-std::string type_name() {
-    return demangle(typeid(T).name());
-}
 
 struct Z {
     std::string size() const {
@@ -159,10 +169,25 @@ int main(int argc, char *argv[]) {
 
     std::cout << "sizes of type " << type_name<decltype(sizes)>() << " have value = " << sizes << std::endl;
 
-    using vec_tuple = std::tuple<std::vector<int>, std::string, std::vector<float>>;
-    vec_tuple vt;
-    
-    mxx::call_all_unpack(vt, resize_caller(), std::make_tuple(13, 17, 19));
+    //using vec_tuple = std::tuple<std::vector<int>, std::string, std::vector<float>>;
+    //vec_tuple vt;
+
+    //mxx::call_all_unpack(vt, resize_caller(), std::make_tuple(13, 17, 19));
+
+    std::cout << " trivial?: " << std::is_trivial<X>::value << std::endl;
+    std::cout << " trivial?: " << std::is_trivial<Y>::value << std::endl;
+    std::cout << " trivial?: " << std::is_trivial<XY>::value << std::endl;
+    std::cout << " trivial?: " << std::is_trivial<std::chrono::milliseconds>::value << std::endl;
+    std::cout << " trivial?: " << std::is_trivial<std::chrono::minutes>::value << std::endl;
+    std::cout << " trivial?: " << std::is_trivial<std::chrono::steady_clock::time_point>::value << std::endl;
+
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<X>::value << std::endl;
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<Y>::value << std::endl;
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<XY>::value << std::endl;
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<std::chrono::milliseconds>::value << std::endl;
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<std::chrono::minutes>::value << std::endl;
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<std::chrono::steady_clock::time_point>::value << std::endl;
+    std::cout << " trivially copyable?: " << std::is_trivially_copyable<std::vector<int>>::value << std::endl;
 
 
     return 0;

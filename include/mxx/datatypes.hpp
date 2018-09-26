@@ -73,8 +73,6 @@ namespace mxx
 // - [ ] implement MPI type introspection (get envelope)
 // - [ ] (see wrappers in official MPI C++ bindings)
 
-template <typename T>
-class is_builtin_type : public std::false_type {};
 
 class datatype;
 
@@ -239,6 +237,8 @@ struct datatype_builder {};
 /*********************************************************************
  *                     Define built-in datatypes                     *
  *********************************************************************/
+template <typename T>
+class is_builtin_type : public std::false_type {};
 
 #define MXX_DATATYPE_MPI_BUILTIN(ctype, mpi_type)                           \
 template <> struct datatype_builder<ctype> {                                \
@@ -568,10 +568,20 @@ public:
     }
 };
 
-template <typename T, typename Derived>
-class datatype_builder_base {
+// determine the offset of a `pointer to member` type without instantiation
+template <typename T, typename Base, typename M>
+typename std::enable_if<std::is_base_of<Base, T>::value, size_t>::type
+offset_of(M Base::* m) {
+    return reinterpret_cast<size_t>(&(((T*)nullptr)->*m));
+}
+
+
+template <typename T>
+class datatype_creator {
+protected:
     // saves information about the members (displacement + MPI_Datatype)
-    std::map<MPI_Aint, ::mxx::datatype> members;
+    std::map<MPI_Aint, mxx::datatype> members;
+
 public:
     template <typename M>
     void add_member_by_offset(size_t offset) {
@@ -585,8 +595,21 @@ public:
         members[displ] = std::move(dt);
     }
 
+    // add members via "pointer to member" types
+    template <typename M>
+    void add_member(M T::*m) {
+        this->template add_member_by_offset<M>(offset_of<T, T, M>(m));
+    }
+
+    // support adding members of base classes
+    template <typename Base, typename M>
+    typename std::enable_if<std::is_base_of<Base, T>::value, void>::type
+    add_member(M Base::*m) {
+        this->template add_member_by_offset<M>(offset_of<T, Base, M>(m));
+    }
+
     // returns the datatype for all added members
-    datatype get_datatype() const {
+    datatype build_datatype() const {
         MXX_ASSERT(members.size() > 0);
         // create the blocklength, displacements, and datatype arrays
         size_t n_members = members.size();
@@ -615,11 +638,11 @@ public:
     }
 };
 
+/*
 template <typename T>
 class value_datatype_builder : public datatype_builder_base<T, value_datatype_builder<T>>, recursive_processor<value_datatype_builder<T>> {
 private:
     // reference to the type we're building the custom datatype for
-    const T& that;
     typedef datatype_builder_base<T, value_datatype_builder<T>> base_type;
 public:
 
@@ -627,7 +650,7 @@ public:
 
     // custom add_member function which adds members by their offset to `&that`
     template <typename M>
-    void add_member(const M& member) {
+    void add_member(const T& that, const M& member) {
         // get member displacement
         MPI_Aint t_adr, elem_adr;
 
@@ -644,13 +667,6 @@ public:
         add_member(std::forward<T>(m));
     }
 };
-
-// determine the offset of a `pointer to member` type without instantiation
-template <typename T, typename Base, typename M>
-typename std::enable_if<std::is_base_of<Base, T>::value, size_t>::type
-offset_of(M Base::* m) {
-    return reinterpret_cast<size_t>(&(((T*)nullptr)->*m));
-}
 
 template <typename T>
 class static_datatype_builder : public datatype_builder_base<T, static_datatype_builder<T>> {
@@ -671,6 +687,7 @@ public:
     }
 };
 
+*/
 
 /*
  * "templates" for different kinds of data structures.
@@ -697,25 +714,11 @@ struct datatype_contiguous {
     }
 };
 
-/*
- * Runtime selection of size
- */
-/*
-template <typename T>
-struct datatype_contiguous<T,0> {
-    static MPI_Datatype get_type(size_t size) {
-        datatype dt = get_datatype<T>().contiguous(size);
-        MPI_Datatype mpidt;
-        MPI_Type_dup(dt.type(), &mpidt);
-        MPI_Type_commit(&mpidt);
-        return mpidt;
-    }
-};
-*/
 
 MXX_DEFINE_IS_GLOBAL_FUNC(make_datatype)
 MXX_DEFINE_HAS_STATIC_MEMBER(get_type)
 
+/*
 template <typename T>
 struct has_builder : has_static_member_get_type<datatype_builder<T>, MPI_Datatype()> {};
 
@@ -732,10 +735,12 @@ struct is_trivial_type<T, typename std::enable_if<
  >::type>
 : std::true_type {};
 
+*/
 
 // TODO: remove this after refactoring the building process for std::array, std::pair, std::tuple,
 //       the custom struct macros and the builtin datatype
 
+/*
 
 template <typename T>
 inline typename std::enable_if<has_static_member_datatype<T, void(static_datatype_builder<T>&)>::value, datatype>::type
@@ -758,6 +763,7 @@ build_datatype() {
     val.datatype(builder);
     return builder.get_datatype();
 }
+*/
 
 // TODO: enable_if specializations for this function
 template <typename T>
@@ -768,12 +774,14 @@ inline datatype build_datatype(const T&) {
 
 // if datatype_builder<T> exists:
 template <typename T>
-inline typename std::enable_if<has_builder<T>::value, datatype>::type
+//inline typename std::enable_if<has_builder<T>::value, datatype>::type
+inline datatype
 build_datatype() {
     datatype dt(datatype_builder<T>::get_type(), is_builtin_type<T>::value);
     return dt;
 }
 
+/*
 template <typename T>
 inline typename std::enable_if<!is_trivial_type<T>::value, datatype>::type
 build_datatype() {
@@ -785,6 +793,7 @@ build_datatype() {
 
     return datatype();
 }
+*/
 
 
 template <typename T>
