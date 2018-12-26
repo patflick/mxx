@@ -22,7 +22,6 @@
  * This is not a substitute for MPI_File functionality.
  * TODO:
  * - [ ] Implement proper MPI_File functions for parallel reading of files
- * - [ ] HDF5 ?
  */
 
 #ifndef MXX_FILE_HPP
@@ -76,6 +75,144 @@ protected:
     size_t size_;
     std::streambuf* sbuf_;
     char* buf_;
+};
+
+
+struct file {
+protected:
+    MPI_File handle;
+    std::string filename;
+    bool isopen;
+
+
+    void clear() {
+        handle = MPI_FILE_NULL;
+        filename = "";
+        isopen = false;
+    }
+public:
+    file() : handle(MPI_FILE_NULL), filename(), isopen(false) {}
+
+    file(file&& o) : handle(o.handle), filename(o.filename), isopen(o.isopen) {
+        o.clear();
+    }
+
+    file(const std::string& filename) : handle(MPI_FILE_NULL), filename(filename), isopen(false) {}
+
+    file(const std::string& filename, int mode) : file(filename) {
+        open(mode);
+    }
+
+    void open(const std::string& filename, int mode) {
+        this->filename = filename;
+        MPI_File_open(MPI_COMM_SELF, filename.c_str(), mode, MPI_INFO_NULL, &handle);
+        this->isopen = true;
+    }
+
+    void open(int mode) {
+        open(this->filename, mode);
+    }
+
+    void close() {
+        if (isopen) {
+            MPI_File_close(&handle);
+            isopen = false;
+            handle = MPI_FILE_NULL;
+        }
+    }
+
+    static void delete_file(const std::string& filename) {
+        MPI_File_delete(filename.c_str(), MPI_INFO_NULL);
+    }
+
+
+    size_t get_size() {
+        MPI_Offset s;
+        MPI_File_get_size(handle, &s);
+        return s;
+    }
+
+    void set_size(size_t size) {
+        MPI_File_set_size(handle, size);
+    }
+
+    template <typename T>
+    void read_at(MPI_Offset offset, T* out, size_t count) {
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(count);
+        MPI_File_read_at(handle, offset, out, 1, dt.type(), MPI_STATUS_IGNORE);
+    }
+
+    template <typename T>
+    void write_at(MPI_Offset offset, T* data, size_t count) {
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(count);
+        MPI_File_write_at(handle, offset, data, 1, dt.type(), MPI_STATUS_IGNORE);
+    }
+
+    // TODO:
+
+    // iread_at
+    // iwrite_at
+    //
+    // read_at_all
+    // write_at_all
+    //
+    // iread_at_all
+    // iwrite_at_all
+    //
+    // read
+    // write
+    //
+    // read_all
+    // write_all
+    //
+    // iread
+    // iwrite
+    //
+    // iread_all
+    // iwrite_all
+    //
+    //
+    //
+    // seek_set
+    // seek_cur
+    // seek_end
+    //
+    // get_pos // `etype` units
+    // get_byte_offset
+    //
+    //
+    //
+
+    virtual ~file() {
+        close();
+    }
+};
+
+struct coll_file : public file {
+    const mxx::comm& comm;
+
+    coll_file(const std::string& filename, const mxx::comm& comm)
+        : file(filename), comm(comm) {}
+
+
+    template <typename T>
+    void read_ordered(size_t count, T* out) {
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(count);
+        MPI_File_read_ordered(handle, out, 1, dt.type(), MPI_STATUS_IGNORE);
+    }
+
+    // collective, blocking
+    // simple ordered write without a need for a file view
+    template <typename T>
+    void write_ordered(const T* buf, size_t count) {
+        mxx::datatype dt = mxx::get_datatype<T>().contiguous(count);
+        MPI_File_write_ordered(handle, const_cast<T*>(buf), 1, dt.type(), MPI_STATUS_IGNORE);
+    }
+
+    void open(int mode) {
+        MPI_File_open(comm, &filename[0], mode, MPI_INFO_NULL, &handle);
+        this->isopen = true;
+    }
 };
 
 std::string file_block_decompose(const char* filename, MPI_Comm comm = MPI_COMM_WORLD, std::size_t max_local_size = 0)
