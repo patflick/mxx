@@ -105,7 +105,7 @@ public:
 
     void open(const std::string& filename, int mode) {
         this->filename = filename;
-        MPI_File_open(MPI_COMM_SELF, &filename[0], mode, MPI_INFO_NULL, &handle);
+        MPI_File_open(MPI_COMM_SELF, const_cast<char*>(filename.c_str()), mode, MPI_INFO_NULL, &handle);
         this->isopen = true;
     }
 
@@ -122,7 +122,7 @@ public:
     }
 
     static void delete_file(const std::string& filename) {
-        MPI_File_delete(&filename[0], MPI_INFO_NULL);
+        MPI_File_delete(const_cast<char*>(filename.c_str()), MPI_INFO_NULL);
     }
 
 
@@ -210,7 +210,7 @@ struct coll_file : public file {
     }
 
     void open(int mode) {
-        MPI_File_open(comm, &filename[0], mode, MPI_INFO_NULL, &handle);
+        MPI_File_open(comm, const_cast<char*>(filename.c_str()), mode, MPI_INFO_NULL, &handle);
         this->isopen = true;
     }
 };
