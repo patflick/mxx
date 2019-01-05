@@ -32,6 +32,7 @@ target_include_directories(mxx INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext>
   $<INSTALL_INTERFACE:include/mxx/ext>)
 
+
 #### Installation
 install(DIRECTORY include/mxx/ DESTINATION include/mxx)
 install(DIRECTORY ext/ DESTINATION include/mxx FILES_MATCHING PATTERN "*.hpp")
@@ -114,7 +115,9 @@ endif(MXX_FAKE_BIG_MPI)
 
 ###### Executable and Libraries
 # Save libs and executables in the same place
-#set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # build mxx enabled gtest module
 add_subdirectory(gtest)
