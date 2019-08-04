@@ -252,33 +252,33 @@ template <> class is_builtin_type<ctype> : public std::true_type {};        \
 // MPI_Datatype
 #define MXX_FOR_ALL_BUILTIN(BUILTIN_TYPE)                                      \
 /* char */                                                                     \
-BUILTIN_TYPE(char, MPI_CHAR);                                                  \
-BUILTIN_TYPE(unsigned char, MPI_UNSIGNED_CHAR);                                \
-BUILTIN_TYPE(signed char, MPI_SIGNED_CHAR);                                    \
+BUILTIN_TYPE(char, MPI_CHAR)                                                   \
+BUILTIN_TYPE(unsigned char, MPI_UNSIGNED_CHAR)                                 \
+BUILTIN_TYPE(signed char, MPI_SIGNED_CHAR)                                     \
                                                                                \
 /* short */                                                                    \
-BUILTIN_TYPE(unsigned short, MPI_UNSIGNED_SHORT);                              \
-BUILTIN_TYPE(short, MPI_SHORT);                                                \
+BUILTIN_TYPE(unsigned short, MPI_UNSIGNED_SHORT)                               \
+BUILTIN_TYPE(short, MPI_SHORT)                                                 \
                                                                                \
 /* int */                                                                      \
-BUILTIN_TYPE(unsigned int, MPI_UNSIGNED);                                      \
-BUILTIN_TYPE(int, MPI_INT);                                                    \
+BUILTIN_TYPE(unsigned int, MPI_UNSIGNED)                                       \
+BUILTIN_TYPE(int, MPI_INT)                                                     \
                                                                                \
 /* long */                                                                     \
-BUILTIN_TYPE(unsigned long, MPI_UNSIGNED_LONG);                                \
-BUILTIN_TYPE(long, MPI_LONG);                                                  \
+BUILTIN_TYPE(unsigned long, MPI_UNSIGNED_LONG)                                 \
+BUILTIN_TYPE(long, MPI_LONG)                                                   \
                                                                                \
 /* long long */                                                                \
-BUILTIN_TYPE(unsigned long long, MPI_UNSIGNED_LONG_LONG);                      \
-BUILTIN_TYPE(long long, MPI_LONG_LONG);                                        \
+BUILTIN_TYPE(unsigned long long, MPI_UNSIGNED_LONG_LONG)                       \
+BUILTIN_TYPE(long long, MPI_LONG_LONG)                                         \
                                                                                \
 /* floats */                                                                   \
-BUILTIN_TYPE(float, MPI_FLOAT);                                                \
-BUILTIN_TYPE(double, MPI_DOUBLE);                                              \
-BUILTIN_TYPE(long double, MPI_LONG_DOUBLE);                                    \
+BUILTIN_TYPE(float, MPI_FLOAT)                                                 \
+BUILTIN_TYPE(double, MPI_DOUBLE)                                               \
+BUILTIN_TYPE(long double, MPI_LONG_DOUBLE)                                     \
 
 
-MXX_FOR_ALL_BUILTIN(MXX_DATATYPE_MPI_BUILTIN);
+MXX_FOR_ALL_BUILTIN(MXX_DATATYPE_MPI_BUILTIN)
 
 #undef MXX_DATATYPE_MPI_BUILTIN
 
@@ -301,7 +301,7 @@ inline std::ostream& operator<<(std::ostream& os, const datatype_name& n) {
 }
 
 // define reverse mapping of datatypes for type decoding
-#define MXX_INSERT_NAME_INTO_MAP(ctype, mpi_type) \
+#define MXX_INSERT_NAME_INTO_MAP(ctype, mpi_type); \
 m.emplace(mpi_type, datatype_name(#mpi_type, #ctype, typeid(ctype).name()))
 
 class builtin_typename_map {
@@ -355,14 +355,14 @@ template <> struct datatype_pair<ctype> {                                   \
 template <> class is_builtin_pair_type<ctype> : public std::true_type {};   \
 
 // integers-integer pairs
-MXX_DATATYPE_BUILTIN_PAIR(short, MPI_SHORT_INT);
-MXX_DATATYPE_BUILTIN_PAIR(int, MPI_2INT);
-MXX_DATATYPE_BUILTIN_PAIR(long, MPI_LONG_INT);
+MXX_DATATYPE_BUILTIN_PAIR(short, MPI_SHORT_INT)
+MXX_DATATYPE_BUILTIN_PAIR(int, MPI_2INT)
+MXX_DATATYPE_BUILTIN_PAIR(long, MPI_LONG_INT)
 
 // floats
-MXX_DATATYPE_BUILTIN_PAIR(float, MPI_FLOAT_INT);
-MXX_DATATYPE_BUILTIN_PAIR(double, MPI_DOUBLE_INT);
-MXX_DATATYPE_BUILTIN_PAIR(long double, MPI_LONG_DOUBLE_INT);
+MXX_DATATYPE_BUILTIN_PAIR(float, MPI_FLOAT_INT)
+MXX_DATATYPE_BUILTIN_PAIR(double, MPI_DOUBLE_INT)
+MXX_DATATYPE_BUILTIN_PAIR(long double, MPI_LONG_DOUBLE_INT)
 
 
 #undef MXX_DATATYPE_BUILTIN_PAIR

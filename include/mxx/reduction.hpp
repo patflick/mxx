@@ -138,15 +138,15 @@ struct get_builtin_op<T, cpp_functor<T> > {                                    \
     }                                                                          \
 };                                                                             \
 
-MXX_BUILTIN_OP(MPI_SUM, std::plus);
-MXX_BUILTIN_OP(MPI_PROD, std::multiplies);
-MXX_BUILTIN_OP(MPI_LAND, std::logical_and);
-MXX_BUILTIN_OP(MPI_LOR, std::logical_or);
-MXX_BUILTIN_OP(MPI_BOR, std::bit_or);
-MXX_BUILTIN_OP(MPI_BXOR, std::bit_xor);
-MXX_BUILTIN_OP(MPI_BAND, std::bit_and);
-MXX_BUILTIN_OP(MPI_MAX, mxx::max);
-MXX_BUILTIN_OP(MPI_MIN, mxx::min);
+MXX_BUILTIN_OP(MPI_SUM, std::plus)
+MXX_BUILTIN_OP(MPI_PROD, std::multiplies)
+MXX_BUILTIN_OP(MPI_LAND, std::logical_and)
+MXX_BUILTIN_OP(MPI_LOR, std::logical_or)
+MXX_BUILTIN_OP(MPI_BOR, std::bit_or)
+MXX_BUILTIN_OP(MPI_BXOR, std::bit_xor)
+MXX_BUILTIN_OP(MPI_BAND, std::bit_and)
+MXX_BUILTIN_OP(MPI_MAX, mxx::max)
+MXX_BUILTIN_OP(MPI_MIN, mxx::min)
 
 #undef MXX_BUILTIN_OP
 
