@@ -741,14 +741,14 @@ void global_scan(InIterator begin, InIterator end, OutIterator out, Func func, c
         local_scan(begin, end, out, func);
         // mxx::scan
         typedef typename std::iterator_traits<OutIterator>::value_type T;
-        T sum = T();
-        if (n > 0)
-            sum = *(out+(n-1));
+        T sum = *(out+(n-1));
         T presum = exscan(sum, func, nonzero_comm, commutative);
-        // accumulate previous sum on all local elements
-        for (size_t i = 0; i < n; ++i) {
-            *o = func(presum, *o);
-            ++o;
+        if (nonzero_comm.rank() != 0) {
+            // accumulate previous sum on all local elements
+            for (size_t i = 0; i < n; ++i) {
+                *o = func(presum, *o);
+                ++o;
+            }
         }
     }
 }
@@ -773,10 +773,12 @@ inline void global_scan_inplace(Iterator begin, Iterator end, Func func, const b
         T sum = *(begin + (n-1));
         T presum = exscan(sum, func, nonzero_comm, commutative);
 
-        // accumulate previous sum on all local elements
-        for (size_t i = 0; i < n; ++i) {
-            *o = func(presum, *o);
-            ++o;
+        if (nonzero_comm.rank() != 0) {
+            // accumulate previous sum on all local elements
+            for (size_t i = 0; i < n; ++i) {
+                *o = func(presum, *o);
+                ++o;
+            }
         }
     }
 }
