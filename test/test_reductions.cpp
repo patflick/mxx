@@ -247,7 +247,7 @@ TEST(MxxReduce, GlobalReduce) {
 
 TEST(MxxReduce, GlobalScan) {
     mxx::comm c;
-    // test reduce with zero elements for some processes
+    // test scan with zero elements for some processes
     size_t n = 0;
     int presize = 0;
     if (c.rank() % 2 == 0) {
@@ -270,6 +270,31 @@ TEST(MxxReduce, GlobalScan) {
     ASSERT_EQ(local.size(), result.size());
     for (size_t i = 0; i < n; ++i) {
         ASSERT_EQ(local[i]*(local[i]+1)/2, result[i]);
+    }
+}
+
+TEST(MxxReduce, GlobalScanMin) {
+    mxx::comm c;
+    // test scan with min and an array of positive
+    // elements sorted in ascending order
+    size_t n = c.size();
+    std::vector<int> local(n);
+    for (size_t i = 0; i < n; ++i) {
+        local[i] = (c.rank()*n)+i+1;
+    }
+    // test inplace scan
+    std::vector<int> local_cpy(local);
+    mxx::global_scan_inplace(local_cpy.begin(), local_cpy.end(), mxx::min<int>(), c);
+    for (size_t i = 0; i < n; ++i) {
+        // 1 is both the first as well as the minimum element
+        ASSERT_EQ(1, local_cpy[i]);
+    }
+    // test scan
+    std::vector<int> result = mxx::global_scan(local, mxx::min<int>(), c);
+    ASSERT_EQ(local.size(), result.size());
+    for (size_t i = 0; i < n; ++i) {
+        // 1 is both the first as well as the minimum element
+        ASSERT_EQ(1, result[i]);
     }
 }
 
