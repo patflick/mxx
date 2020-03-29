@@ -111,15 +111,18 @@ void stable_distribute(_InIterator begin, _InIterator end, _OutIterator out, con
         size_t prefix = mxx::exscan(local_size, comm);
 
         // calculate where to send elements
+        // if there are any elements to send
         std::vector<size_t> send_counts(comm.size(), 0);
-        blk_dist part(total_size, comm.size(), comm.rank());
-        int first_p = part.rank_of(prefix);
-        size_t left_to_send = local_size;
-        for (; left_to_send > 0 && first_p < comm.size(); ++first_p) {
-            size_t nsend = std::min<size_t>(part.iprefix_size(first_p) - prefix, left_to_send);
-            send_counts[first_p] = nsend;
-            left_to_send -= nsend;
-            prefix += nsend;
+        if (local_size > 0) {
+          blk_dist part(total_size, comm.size(), comm.rank());
+          int first_p = part.rank_of(prefix);
+          size_t left_to_send = local_size;
+          for (; left_to_send > 0 && first_p < comm.size(); ++first_p) {
+              size_t nsend = std::min<size_t>(part.iprefix_size(first_p) - prefix, left_to_send);
+              send_counts[first_p] = nsend;
+              left_to_send -= nsend;
+              prefix += nsend;
+          }
         }
         std::vector<size_t> recv_counts = mxx::all2all(send_counts, comm);
         // TODO: accept iterators in mxx::all2all?
