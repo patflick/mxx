@@ -18,6 +18,7 @@
 #define MXX_COMMON_HPP
 
 #include <mpi.h>
+#include <cstdio>
 #include <limits>
 
 namespace mxx {
